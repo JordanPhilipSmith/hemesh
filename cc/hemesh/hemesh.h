@@ -126,7 +126,7 @@ class SortedIndicesIterableBase {
   };  // class iterator
 
   SortedIndicesIterableBase(const std::unordered_set<IndexT>& indices) {
-    this->indices_(indices);
+    this->indices_.insert(this->indices_.end(), indices.cbegin(), indices.cend());
     std::sort(this->indices_.begin(), this->indices_.end());
   }
 
