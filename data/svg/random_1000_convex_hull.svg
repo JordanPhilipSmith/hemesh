@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="1000" height="1000" viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <g transform="translate(500 500) scale(990.008 -990.008) translate(-0.500004 -0.499684)">
+    <path d="
+     M3.91542e-05 0.658065 L7.82637e-06 0.131538
+     M7.82637e-06 0.131538 L0.000595042 0.000879
+     M0.000595042 0.000879 L0.798596 0.000275349
+     M0.798596 0.000275349 L0.982032 0.018916
+     M0.982032 0.018916 L0.991853 0.077255
+     M0.991853 0.077255 L0.999117 0.153604
+     M0.999117 0.153604 L1 0.999092
+     M1 0.999092 L0.23395 0.99829
+     M0.23395 0.99829 L0.0716365 0.994661
+     M0.0716365 0.994661 L0.0216561 0.97424
+     M0.0216561 0.97424 L0.00481561 0.935936
+     M0.00481561 0.935936 L4.02252e-05 0.676065
+     M4.02252e-05 0.676065 L3.91542e-05 0.658065
+     Z"
+     style="fill:none;stroke:black;stroke-width:3;vector-effect:non-scaling-stroke"/>
+  </g>
+</svg>

@@ -1,0 +1,89 @@
+# Command line interface tools.
+
+package(default_visibility = ["//visibility:public"])
+
+# Binaries.
+
+cc_binary(
+  name = "random_points_cli",
+  srcs = [
+    "random_points_cli.cc",
+  ],
+  deps = [
+    "//cc/file:file_helper",
+    "//cc/hemesh:hemesh",
+    "//cc/hemesh:hemesh_io_obj",
+    "//cc/math:vector",
+    "@abseil-cpp//absl/flags:commandlineflag",
+    "@abseil-cpp//absl/flags:flag",
+    "@abseil-cpp//absl/flags:parse",
+    "@abseil-cpp//absl/log",
+    "@abseil-cpp//absl/status",
+    "@abseil-cpp//absl/status:statusor",
+    "@abseil-cpp//absl/strings",
+  ],
+)
+
+cc_binary(
+  name = "obj_to_svg_cli",
+  srcs = [
+    "obj_to_svg_cli.cc",
+  ],
+  deps = [
+    "//cc/file:file_helper",
+    "//cc/hemesh:hemesh",
+    "//cc/hemesh:hemesh_io_obj",
+    "//cc/hemesh:hemesh_io_svg",
+    "@abseil-cpp//absl/flags:commandlineflag",
+    "@abseil-cpp//absl/flags:flag",
+    "@abseil-cpp//absl/flags:parse",
+    "@abseil-cpp//absl/log",
+    "@abseil-cpp//absl/status",
+    "@abseil-cpp//absl/status:statusor",
+    "@abseil-cpp//absl/strings",
+  ],
+)
+
+cc_binary(
+  name = "convex_hull_2d_cli",
+  srcs = [
+    "convex_hull_2d_cli.cc",
+  ],
+  deps = [
+    "//cc/file:file_helper",
+    "//cc/geom:delaunay_predicates",
+    "//cc/hemesh:convex_hull_2d",
+    "//cc/hemesh:hemesh",
+    "//cc/hemesh:hemesh_io_obj",
+    "//cc/math:vector",
+    "@abseil-cpp//absl/flags:commandlineflag",
+    "@abseil-cpp//absl/flags:flag",
+    "@abseil-cpp//absl/flags:parse",
+    "@abseil-cpp//absl/log",
+    "@abseil-cpp//absl/status",
+    "@abseil-cpp//absl/status:statusor",
+    "@abseil-cpp//absl/strings",
+  ],
+)
+
+cc_binary(
+  name = "delaunay_triangulator_cli",
+  srcs = [
+    "delaunay_triangulator_cli.cc",
+  ],
+  deps = [
+    "//cc/file:file_helper",
+    "//cc/geom:delaunay_predicates",
+    "//cc/hemesh:delaunay_triangulator",
+    "//cc/hemesh:hemesh",
+    "//cc/hemesh:hemesh_io_obj",
+    "//cc/math:vector",
+    "@abseil-cpp//absl/flags:commandlineflag",
+    "@abseil-cpp//absl/flags:flag",
+    "@abseil-cpp//absl/flags:parse",
+    "@abseil-cpp//absl/log",
+    "@abseil-cpp//absl/status",
+    "@abseil-cpp//absl/status:statusor",
+    "@abseil-cpp//absl/strings",
+  ],
+)

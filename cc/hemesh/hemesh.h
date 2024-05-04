@@ -1,37 +1,98 @@
 #pragma once
-// Half edge mesh.
+
+// Half edge mesh to represent 2-manifolds.  This is a modification of the quad edge data structure.
 //     _
 //   _| |_
 //  |_ \ _|
 //    |_|
-
+//
+// The 2-manifold surface mesh is made up of vertices, facets, and half edges.
+//
+// Vertex:
+//   The vertex contains the position.  The vertex points to one half edge in its CCW
+//   (counterclockwise) half edge ring.  The valence is the number of half edges (i.e. vertex
+//   neighbors).
+//
+// Facet:
+//   A facet is a simple face loop.  The facet points to one half edge in its CCW half edge ring.
+//   The valence is the number of half edges (i.e. vertices).
+//
+// Edge and Half Edge:
+//   Every edge is represented by two opposite direction half edge pairs.  The half edge from
+//   V1->V2 has an opposite partner pair from V2->V1.  An edge and its two half edges are allocated
+//   and deallocated as a unit using HEAllocate() (one of the two half edges is returned).
+//
+//   Each half edge points to a vertex, a facet, its opposite partner half edge, its edge, the next
+//   half edge around the vertex, and the next half edge around the facet.
+//
+//   Half edges on the boundary of the mesh point to the invalid facet (kFAInvalid).  There may be
+//   multiple connected components, so it is not possible to represent the boundary area with a
+//   single simple facet.  The boundary half edges are members of a set, hence the boundary can be
+//   iterated over.
+//
+// Example: Square
+//
+// |             F0             |
+// |                            |
+// |           H7_              |
+// |           _| |_            |
+// |       V4-|_ / _|--V3       |
+// |       |    |_| H6 |        |
+// |       _ H8        _        |
+// |     _| |_       _| |_H5    |
+// | F0 |_ \ _|  F1 |_ \ _|  F0 |
+// |      |_|         |_|       |
+// |     H9|     _   H4|        |
+// |       | H2_| |_   |        |
+// |       V4-|_ / _|--V3       |
+// |            |_| H3          |
+// |                            |
+// |             F0             |
+ 
 #include <algorithm>
-#include <assert>
+#include <iostream>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
-#ifndef CHECK
-#define CHECK(a) assert(a);
-#endif  // CHECK
-
-#ifndef CHECK_EQ
-#define CHECK_EQ(a, b) assert((a) == (b));
-#endif  // CHECK_EQ
-
-#ifndef CHECK_NE
-#define CHECK_NE(a, b) assert((a) != (b));
-#endif  // CHECK_NE
+#include "absl/log/check.h"
+#include "absl/log/log.h"
+#include "absl/strings/str_cat.h"
 
 namespace hemesh {
 
-template <class IndexT>
+// Vertex index.
+using VXIndex = int;
+// Facet index.
+using FAIndex = int;
+// Edge index.
+using EIndex = int;
+// Half edge index.
+using HEIndex = int;
+
+constexpr VXIndex kVXInvalid = VXIndex(0);
+constexpr FAIndex kFAInvalid = FAIndex(0);
+constexpr EIndex kEInvalid = EIndex(0);
+constexpr HEIndex kHEInvalid = HEIndex(0);
+  
+template<class IndexT>
 class IndicesIterableBase {
+ public:
   class const_iterator {
-    const_iterator(std::unordered_set<IndexT>::const_iterator iter) : iter_(iter) {}
+   public:
+    const_iterator(typename std::unordered_set<IndexT>::const_iterator iter) : iter_(iter) {}
     const_iterator(const const_iterator& iter) : const_iterator(iter.iter_) {}
 
     IndexT operator*() const {
-      return->iter_;
+      return *(this->iter_);
+    }
+
+    bool operator==(const const_iterator& iter) const {
+      return this->iter_ == iter.iter_;
+    }
+
+    bool operator!=(const const_iterator& iter) const {
+      return !(*this == iter);
     }
 
     const_iterator& operator++() {
@@ -40,15 +101,24 @@ class IndicesIterableBase {
     }
 
    private:
-    std::unordered_set<IndexT>::const_iterator iter_;
+    typename std::unordered_set<IndexT>::const_iterator iter_;
   };  // class const_iterator
 
   class iterator {
-    iterator(std::unordered_set<IndexT>::iterator iter) : iter_(iter) {}
+   public:
+    iterator(typename std::unordered_set<IndexT>::iterator iter) : iter_(iter) {}
     iterator(const iterator& iter) : iterator(iter.iter_) {}
 
     IndexT operator*() const {
-      return->iter_;
+      return *(this->iter_);
+    }
+
+    bool operator==(const iterator& iter) const {
+      return this->iter_ == iter.iter_;
+    }
+
+    bool operator!=(const iterator& iter) const {
+      return !(*this == iter);
     }
 
     iterator& operator++() {
@@ -57,10 +127,10 @@ class IndicesIterableBase {
     }
 
    private:
-    std::unordered_set<IndexT>::iterator iter_;
+    typename std::unordered_set<IndexT>::iterator iter_;
   };  // class iterator
 
-  IndicesIterableBase(const std::vector<IndexT>* indices) : indices_(indices) {
+  IndicesIterableBase(const std::unordered_set<IndexT>* indices) : indices_(indices) {
     CHECK_NE(this->indices_, nullptr);
   }
 
@@ -85,17 +155,125 @@ class IndicesIterableBase {
 };  // class IndicesIterableBase
 
 using VertexIterable = IndicesIterableBase<VXIndex>;
-using HalfEdgeIterable = IndicesIterableBase<HEIndex>; 
 using FacetIterable = IndicesIterableBase<FAIndex>; 
+using EdgeIterable = IndicesIterableBase<EIndex>; 
+using BoundaryHalfEdgeIterable = IndicesIterableBase<HEIndex>; 
 
-template <class IndexT>
-class SortedIndicesIterableBase {
+class HalfEdgeIterable {
+ public:
   class const_iterator {
-    const_iterator(std::vector<IndexT>::const_iterator iter) : iter_(iter) {}
+   public:
+    const_iterator(typename std::unordered_set<EIndex>::const_iterator e_iter)
+        : e_iter_(e_iter), bit_(0) {}
+    const_iterator(const const_iterator& iter) : e_iter_(iter.e_iter_), bit_(iter.bit_) {}
+
+    HEIndex operator*() const {
+      return static_cast<HEIndex>((static_cast<int>(*(this->e_iter_)) << 1) + this->bit_);
+    }
+
+    bool operator==(const const_iterator& iter) const {
+      return this->e_iter_ == iter.e_iter_ && this->bit_ == iter.bit_;
+    }
+
+    bool operator!=(const const_iterator& iter) const {
+      return !(*this == iter);
+    }
+
+    const_iterator& operator++() {
+      if (this->bit_ == 0) {
+	this->bit_ = 1;
+      } else {
+        ++(this->e_iter_);
+        this->bit_ = 0;
+      }
+      return *this;
+    }
+
+   private:
+    typename std::unordered_set<EIndex>::const_iterator e_iter_;
+    // Half edge index least significant bit.
+    int bit_;
+  };  // class const_iterator
+
+  class iterator {
+   public:
+    iterator(typename std::unordered_set<EIndex>::iterator e_iter)
+        : e_iter_(e_iter), bit_(0) {}
+    iterator(const iterator& iter) : e_iter_(iter.e_iter_), bit_(iter.bit_) {}
+
+    HEIndex operator*() const {
+      return static_cast<HEIndex>((static_cast<int>(*(this->e_iter_)) << 1) + this->bit_);
+    }
+
+    bool operator==(const iterator& iter) const {
+      return this->e_iter_ == iter.e_iter_ && this->bit_ == iter.bit_;
+    }
+
+    bool operator!=(const iterator& iter) const {
+      return !(*this == iter);
+    }
+
+    iterator& operator++() {
+      if (this->bit_ == 0) {
+	this->bit_ = 1;
+      } else {
+        ++(this->e_iter_);
+        this->bit_ = 0;
+      }
+      return *this;
+    }
+
+   private:
+    typename std::unordered_set<EIndex>::iterator e_iter_;
+    // Half edge index least significant bit.
+    int bit_;
+  };  // class iterator
+
+  // Constructor.
+  // Parameters:
+  //   e_indices - Each edge index corresponds to exactly two half edge indices.
+  HalfEdgeIterable(const std::unordered_set<EIndex>* e_indices) : e_indices_(e_indices) {
+    CHECK_NE(this->e_indices_, nullptr);
+  }
+
+  const_iterator cbegin() {
+    return const_iterator(this->e_indices_->cbegin());
+  }
+
+  const_iterator cend() {
+    return const_iterator(this->e_indices_->cend());
+  }
+
+  iterator begin() {
+    return iterator(this->e_indices_->begin());
+  }
+
+  iterator end() {
+    return iterator(this->e_indices_->end());
+  }
+
+ private:
+  const std::unordered_set<EIndex>* e_indices_;
+};  // class HalfEdgeIndicesIterableBase
+
+template<class IndexT>
+class SortedIndicesIterableBase {
+ public:
+  class const_iterator {
+   public:
+    const_iterator(typename std::vector<IndexT>::const_iterator iter) : iter_(iter) {}
     const_iterator(const const_iterator& iter) : const_iterator(iter.iter_) {}
 
     IndexT operator*() const {
-      return->iter_;
+      return *(this->iter_);
+    }
+
+    bool operator==(const const_iterator& iter) const {
+      return this->iter_ == iter.iter_;
+    }
+
+    bool operator!=(const const_iterator& iter) const {
+      return !(*this == iter);
     }
 
     const_iterator& operator++() {
@@ -104,16 +282,25 @@ class SortedIndicesIterableBase {
     }
 
    private:
-    std::vector<IndexT>::const_iterator iter_;
+    typename std::vector<IndexT>::const_iterator iter_;
   };  // class const_iterator
 
   class iterator {
-    iterator(std::vector<IndexT>::iterator iter) : iter_(iter) {}
+   public:
+    iterator(typename std::vector<IndexT>::iterator iter) : iter_(iter) {}
     iterator(const iterator& iter) : iterator(iter.iter_) {}
 
     // Disallow assigning to the temporary sorted vector.
     IndexT operator*() const {
-      return->iter_;
+      return *(this->iter_);
+    }
+
+    bool operator==(const iterator& iter) const {
+      return this->iter_ == iter.iter_;
+    }
+
+    bool operator!=(const iterator& iter) const {
+      return !(*this == iter);
     }
 
     iterator& operator++() {
@@ -122,11 +309,19 @@ class SortedIndicesIterableBase {
     }
 
    private:
-    std::vector<IndexT>::iterator iter_;
+    typename std::vector<IndexT>::iterator iter_;
   };  // class iterator
 
+  // Constructor.
   SortedIndicesIterableBase(const std::unordered_set<IndexT>& indices) {
     this->indices_.insert(this->indices_.end(), indices.cbegin(), indices.cend());
+    std::sort(this->indices_.begin(), this->indices_.end());
+  }
+
+  // Constructor used with half edges only.
+  // Parameters:
+  //   indices - Unsorted indices.
+  SortedIndicesIterableBase(std::vector<IndexT> indices) : indices_(indices) {
     std::sort(this->indices_.begin(), this->indices_.end());
   }
 
@@ -151,24 +346,29 @@ class SortedIndicesIterableBase {
 };  // class SortedIndicesIterableBase
 
 using SortedVertexIterable = SortedIndicesIterableBase<VXIndex>;
-using SortedHalfEdgeIterable = SortedIndicesIterableBase<HEIndex>; 
 using SortedFacetIterable = SortedIndicesIterableBase<FAIndex>; 
+using SortedEdgeIterable = SortedIndicesIterableBase<EIndex>; 
+using SortedHalfEdgeIterable = SortedIndicesIterableBase<HEIndex>; 
+using SortedBoundaryHalfEdgeIterable = SortedIndicesIterableBase<HEIndex>; 
 
+// Mesh connectivity without geometric positions.
 class MeshConnectivity {
  public:
-  using VXIndex = int;
-  using HEIndex = int;
-  using FAIndex = int;
-
-  static constexpr VXIndex kVXInvalid = VXIndex(0);
-  static constexpr HEIndex kHEInvalid = HEIndex(0);
-  static constexpr FAIndex kFAInvalid = FAIndex(0);
-
+  // Constructor.
   MeshConnectivity()
-   : vertex_connectivities_(1) {
+    : vertex_connectivities_(1),
+      facet_connectivities_(1),
+      edge_connectivities_(1),
+      half_edge_connectivities_(2) {
      vertex_connectivities_[0].vx_free = kVXInvalid;
+     facet_connectivities_[0].fa_free = kFAInvalid;
+     edge_connectivities_[0].e_free = kEInvalid;
   }
 
+  virtual ~MeshConnectivity() = default;
+  
+  // Vertex methods.
+  
   int GetVerticesSize() const {
     return static_cast<int>(this->vxs_.size());
   }
@@ -176,6 +376,7 @@ class MeshConnectivity {
   VertexIterable GetVXIndices() const {
     return VertexIterable(&(this->vxs_));
   }
+
   SortedVertexIterable GetSortedVXIndices() const {
     return SortedVertexIterable(this->vxs_);
   }
@@ -211,29 +412,334 @@ class MeshConnectivity {
   }
 
   void VXDeallocate(VXIndex vx) {
-    CHECK_EQ(this->vxs_.erase(vx), 1);
     this->VXClear(vx);
     this->vertex_connectivities_[vx].vx_free = this->vertex_connectivities_[0].vx_free;
     this->vertex_connectivities_[0].vx_free = vx;
+    CHECK_EQ(this->vxs_.erase(vx), 1);
+  }
+
+  // Facet methods.
+  
+  int GetFacetsSize() const {
+    return static_cast<int>(this->fas_.size());
+  }
+
+  FacetIterable GetFAIndices() const {
+    return FacetIterable(&(this->fas_));
+  }
+
+  SortedFacetIterable GetSortedFAIndices() const {
+    return SortedFacetIterable(this->fas_);
+  }
+
+  int FAGetValence(FAIndex fa) const {
+    return this->FAGetConnectivity(fa).valence;
+  }
+
+  void FASetValence(FAIndex fa, int valence) {
+    this->FAMutableConnectivity(fa)->valence = valence;
+  }
+
+  HEIndex FAGetHE(FAIndex fa) const {
+    return this->FAGetConnectivity(fa).he;    
+  }
+
+  void FASetHE(FAIndex fa, HEIndex he) {
+    this->FAMutableConnectivity(fa)->he = he;
+  }
+
+  FAIndex FAAllocate() {
+    FAIndex fa = this->facet_connectivities_[0].fa_free;
+    if (fa == kFAInvalid) {
+      fa = this->FANew();
+    } else {
+      this->facet_connectivities_[0].fa_free = 
+          this->facet_connectivities_[this->facet_connectivities_[0].fa_free].fa_free;
+    }
+    this->FAInit(fa);
+    auto [iter, is_inserted] = this->fas_.insert(fa);
+    CHECK(is_inserted);
+    return fa;
+  }
+
+  void FADeallocate(FAIndex fa) {
+    this->FAClear(fa);
+    this->facet_connectivities_[fa].fa_free = this->facet_connectivities_[0].fa_free;
+    this->facet_connectivities_[0].fa_free = fa;
+    CHECK_EQ(this->fas_.erase(fa), 1);
+  }
+
+  // Edge methods.
+  
+  int GetEdgesSize() const {
+    return static_cast<int>(this->es_.size());
+  }
+
+  EdgeIterable GetEIndices() const {
+    return EdgeIterable(&(this->es_));
+  }
+
+  SortedEdgeIterable GetSortedEIndices() const {
+    return SortedEdgeIterable(this->es_);
+  }
+
+  HEIndex EGetHE(EIndex e) const {
+    // The first half edge = 2 * e.
+    return static_cast<EIndex>(static_cast<int>(e) << 1);
+  }
+
+  // Half edge methods.
+  
+  int GetHalfEdgesSize() const {
+    return static_cast<int>(this->es_.size()) << 1;
+  }
+
+  HalfEdgeIterable GetHEIndices() const {
+    return HalfEdgeIterable(&(this->es_));
+  }
+
+  SortedHalfEdgeIterable GetSortedHEIndices() const {
+    const int size = this->GetHalfEdgesSize();
+    std::vector<HEIndex> unsorted_hes(size);
+    int i = 0;
+    for (EIndex e : this->es_) {
+      const HEIndex he = this->EGetHE(e);
+      CHECK_LT(i, size);
+      unsorted_hes[i] = he;
+      ++i;
+      CHECK_LT(i, size);
+      unsorted_hes[i] = this->HEGetHE(he);
+      ++i;
+    }
+    CHECK_EQ(i, size);
+    return SortedHalfEdgeIterable(unsorted_hes);
+  }
+
+  int GetBoundaryHalfEdgesSize() const {
+    return static_cast<int>(this->boundary_hes_.size());
+  }
+
+  BoundaryHalfEdgeIterable GetBoundaryHEIndices() const {
+    return BoundaryHalfEdgeIterable(&(this->boundary_hes_));
+  }
+
+  SortedBoundaryHalfEdgeIterable GetSortedBoundaryHEIndices() const {
+    return SortedBoundaryHalfEdgeIterable(this->boundary_hes_);
+  }
+
+  VXIndex HEGetVX(HEIndex he) const {
+    return this->HEGetConnectivity(he).vx;
+  }
+
+  void HESetVX(HEIndex he, VXIndex vx) {
+    this->HEMutableConnectivity(he)->vx = vx;
+  }
+
+  FAIndex HEGetFA(HEIndex he) const {
+    return this->HEGetConnectivity(he).fa;
+  }
+
+  void HESetFA(HEIndex he, FAIndex fa) {
+    this->HEMutableConnectivity(he)->fa = fa;
+  }
+
+  EIndex HEGetE(HEIndex he) const {
+    return static_cast<EIndex>(static_cast<int>(he) >> 1);
+  }
+
+  HEIndex HEGetHE(HEIndex he) const {
+    return static_cast<HEIndex>(static_cast<int>(he) ^ 0x1);
+  }
+
+  HEIndex HEGetVXNext(HEIndex he) const {
+    return this->HEGetConnectivity(he).he_vx_next;
+  }
+
+  HEIndex HEGetVXPrev(HEIndex he) const {
+    return this->HEGetFANext(this->HEGetHE(he));
+  }
+
+  HEIndex HEGetFANext(HEIndex he) const {
+    return this->HEGetConnectivity(he).he_fa_next;
+  }
+
+  HEIndex HEGetFAPrev(HEIndex he) const {
+    return this->HEGetHE(this->HEGetVXNext(he));
+  }
+
+  bool HEGetIsBoundary(HEIndex he) const {
+    return this->boundary_hes_.find(he) != this->boundary_hes_.cend();
+  }
+  
+  void HESetIsBoundary(HEIndex he, bool is_boundary) {
+    if (is_boundary) {
+      this->boundary_hes_.insert(he);
+    } else {
+      this->boundary_hes_.erase(he);
+    }
+  }
+  
+  HEIndex HEAllocate() {
+    EIndex e = this->edge_connectivities_[0].e_free;
+    if (e == kEInvalid) {
+      // This allocates the edge and the two associated half edges.
+      e = this->ENew();
+    } else {
+      this->edge_connectivities_[0].e_free = 
+          this->edge_connectivities_[this->edge_connectivities_[0].e_free].e_free;
+    }
+    // Initializes the two associated half edge to be opposite pairs.
+    this->EInit(e);
+    auto [iter, is_inserted] = this->es_.insert(e);
+    CHECK(is_inserted);
+    return this->EGetHE(e);
+  }
+
+  void HEDeallocate(HEIndex he) {
+    const HEIndex hes[2] = {he, this->HEGetHE(he)};
+    for (int i = 0; i < 2; ++i) {
+      auto iter = this->boundary_hes_.find(hes[i]);
+      if (iter != this->boundary_hes_.end()) {
+	this->boundary_hes_.erase(iter);
+      }
+      this->HEClear(hes[i]);
+    }
+
+    const EIndex e = this->HEGetE(he);
+    this->EClear(e);
+    this->edge_connectivities_[e].e_free = this->edge_connectivities_[0].e_free;
+    this->edge_connectivities_[0].e_free = e;
+    CHECK_EQ(this->es_.erase(e), 1);
+  }
+
+  void Splice(HEIndex he0, HEIndex he1) {
+    const HEIndex he_fa_prev0 = this->HEGetFAPrev(he0);
+    const HEIndex he_fa_prev1 = this->HEGetFAPrev(he1);
+    this->half_edge_connectivities_[he_fa_prev0].he_fa_next = he1;
+    this->half_edge_connectivities_[he_fa_prev1].he_fa_next = he0;
+    this->half_edge_connectivities_[he0].he_vx_next = this->HEGetHE(he_fa_prev1);
+    this->half_edge_connectivities_[he1].he_vx_next = this->HEGetHE(he_fa_prev0);
+  }
+
+  // Debugging methods.
+  
+  std::string Display() const {
+    std::string buffer;
+
+    absl::StrAppend(&buffer, "BEGIN: Mesh\n");
+
+    absl::StrAppend(&buffer, "  BEGIN: Euler characteristic\n");
+    const int vertices_size = this->GetVerticesSize();
+    const int facets_size = this->GetFacetsSize();
+    const int half_edges_size = this->GetHalfEdgesSize();
+    const int edges_size = this->GetEdgesSize();
+    absl::StrAppend(&buffer, "    2 = V - E + F = ", vertices_size, " - ", edges_size, " + ",
+		    facets_size, " = ", (vertices_size - edges_size + facets_size), "\n");
+    absl::StrAppend(&buffer, "  END  : Euler characteristic\n");
+
+    absl::StrAppend(&buffer, "  BEGIN: Vertices : size = ", vertices_size, "\n");
+    for (VXIndex vx : this->GetSortedVXIndices()) {
+      absl::StrAppend(&buffer, "    BEGIN: vx", vx, " : valence = ", this->VXGetValence(vx),
+		      "\n");
+      this->VXDisplay(vx, &buffer);
+      absl::StrAppend(&buffer, "    END  : vx", vx, "\n");
+    }
+    absl::StrAppend(&buffer, "  END  : Vertices : size = ", vertices_size, "\n");
+
+    absl::StrAppend(&buffer, "  BEGIN: Facets : size = ", facets_size, "\n");
+    for (FAIndex fa : this->GetSortedFAIndices()) {
+      absl::StrAppend(&buffer, "    BEGIN: fa", fa, " : valence = ", this->FAGetValence(fa),
+		      "\n");
+      this->FADisplay(fa, &buffer);
+      absl::StrAppend(&buffer, "    END  : fa", fa, "\n");
+    }
+    absl::StrAppend(&buffer, "  END  : Facets : size = ", facets_size, "\n");
+
+    absl::StrAppend(&buffer, "  BEGIN: Half edges : size = ", half_edges_size, "\n");
+    for (HEIndex he : this->GetSortedHEIndices()) {
+      absl::StrAppend(&buffer, "    BEGIN: he", he, "\n");
+      this->HEDisplay(he, &buffer);
+      absl::StrAppend(&buffer, "    END  : he", he, "\n");
+    }
+    absl::StrAppend(&buffer, "  END  : Half edges : size = ", half_edges_size, "\n");
+
+    const int boundary_half_edges_size = this->GetBoundaryHalfEdgesSize();
+    absl::StrAppend(&buffer, "  BEGIN: Boundary half edges : size = ", boundary_half_edges_size,
+		    "\n");
+    if (0 < boundary_half_edges_size) {
+      absl::StrAppend(&buffer, "   ");
+      for (HEIndex he : this->GetSortedBoundaryHEIndices()) {
+        absl::StrAppend(&buffer, " he", he);
+      }
+      absl::StrAppend(&buffer, "\n");
+    }
+    absl::StrAppend(&buffer, "  END  : Boundary half edges : size = ", boundary_half_edges_size,
+		    "\n");
+
+    absl::StrAppend(&buffer, "END  : Mesh\n");
+
+    return buffer;
   }
 
  protected:
   static constexpr VXIndex kVXFreeInvalid = VXIndex(-1);
-  static constexpr HEIndex kHEFreeInvalid = HEIndex(-1);
   static constexpr FAIndex kFAFreeInvalid = FAIndex(-1);
+  static constexpr EIndex kEFreeInvalid = EIndex(-1);
 
   struct VertexConnectivity {
     bool IsAllocated() const {
-      return this->vx_free != kVXFreeInvalid;
+      return this->vx_free == kVXFreeInvalid;
     }
 
     int valence = 0;
+    // One half edge in the vertex ring.
     HEIndex he = kHEInvalid;
-    VXIndex vx_free = kVXInvalid;
+    VXIndex vx_free = kVXFreeInvalid;
   };  // struct VertexConnectivity
+
+  struct FacetConnectivity {
+    bool IsAllocated() const {
+      return this->fa_free == kFAFreeInvalid;
+    }
+
+    int valence = 0;
+    // One half edge in the facet ring.
+    HEIndex he = kHEInvalid;
+    FAIndex fa_free = kFAFreeInvalid;
+  };  // struct FacetConnectivity
+
+  struct EdgeConnectivity {
+    bool IsAllocated() const {
+      return this->e_free == kEFreeInvalid;
+    }
+
+    FAIndex e_free = kEFreeInvalid;
+  };  // struct EdgeConnectivity
+
+  struct HalfEdgeConnectivity {
+    // Origin vertex of the half edge.
+    VXIndex vx = kVXInvalid;
+    // Left facet of the half edge.
+    FAIndex fa = kFAInvalid;
+    // Opposite direction partner half edge.
+    HEIndex he = kHEInvalid;
+    // Next half edge in the vertex loop.
+    HEIndex he_vx_next = kHEInvalid;
+    // Next half edge in the facet loop.
+    HEIndex he_fa_next = kHEInvalid;
+  };  // struct HalfEdgeConnectivity
+
+  // Vertex methods.
 
   bool IsValidVXIndex(VXIndex vx) const {
     return VXIndex(0) < vx && vx < static_cast<int>(this->vertex_connectivities_.size());
+  }
+
+  bool IsAllocatedVXIndex(VXIndex vx) const {
+    if (!this->IsValidVXIndex(vx)) {
+      return false;
+    }
+    return this->vertex_connectivities_[vx].IsAllocated();
   }
 
   const VertexConnectivity& VXGetConnectivity(VXIndex vx) const {
@@ -252,8 +758,8 @@ class MeshConnectivity {
 
   // Resize the vertex arrays to add a new vertex.
   virtual VXIndex VXNew() {
-    VXIndex vx = static_cast<VXIndex>(this->vertex_connectivity_.size());
-    this->vertex_connectivity_.resize(vx + 1);
+    VXIndex vx = static_cast<VXIndex>(this->vertex_connectivities_.size());
+    this->vertex_connectivities_.resize(vx + 1);
     return vx;
   }
 
@@ -272,9 +778,231 @@ class MeshConnectivity {
     vertex_connectivity->vx_free = kVXInvalid;
   }
 
+  virtual void VXDisplay(VXIndex vx, std::string *buffer) const {
+    CHECK_NE(buffer, nullptr);
+    const HEIndex he_begin = this->VXGetHE(vx);
+    absl::StrAppend(buffer, "      he", he_begin, "\n");
+
+    // Vertex neighbors.
+    HEIndex he = he_begin;
+    absl::StrAppend(buffer, "     ");
+    if (he != kHEInvalid) {
+      do {
+	absl::StrAppend(buffer, " vx", this->HEGetVX(this->HEGetHE(he)));
+	he = this->HEGetVXNext(he);
+      } while (he != he_begin);
+    }
+    absl::StrAppend(buffer, "\n");
+    
+    // Facet neighbors.
+    he = he_begin;
+    absl::StrAppend(buffer, "     ");
+    if (he != kHEInvalid) {
+      do {
+	absl::StrAppend(buffer, " fa", this->HEGetFA(he));
+	he = this->HEGetVXNext(he);
+      } while (he != he_begin);
+    }
+    absl::StrAppend(buffer, "\n");
+  }
+
+  // Facet methods.
+
+  bool IsValidFAIndex(FAIndex fa) const {
+    return FAIndex(0) < fa && fa < static_cast<int>(this->facet_connectivities_.size());
+  }
+
+  bool IsAllocatedFAIndex(FAIndex fa) const {
+    if (!this->IsValidFAIndex(fa)) {
+      return false;
+    }
+    return this->facet_connectivities_[fa].IsAllocated();
+  }
+
+  const FacetConnectivity& FAGetConnectivity(FAIndex fa) const {
+    CHECK(this->IsValidFAIndex(fa));
+    const FacetConnectivity& facet_connectivity = this->facet_connectivities_[fa];
+    CHECK(facet_connectivity.IsAllocated());
+    return facet_connectivity;
+  }
+
+  FacetConnectivity* FAMutableConnectivity(FAIndex fa) {
+    CHECK(this->IsValidFAIndex(fa));
+    FacetConnectivity* facet_connectivity = &(this->facet_connectivities_[fa]);
+    CHECK(facet_connectivity->IsAllocated());
+    return facet_connectivity;
+  }
+
+  // Resize the facet arrays to add a new facet.
+  virtual FAIndex FANew() {
+    FAIndex fa = static_cast<FAIndex>(this->facet_connectivities_.size());
+    this->facet_connectivities_.resize(fa + 1);
+    return fa;
+  }
+
+  virtual void FAInit(FAIndex fa) {
+    CHECK(this->IsValidFAIndex(fa));
+    FacetConnectivity* facet_connectivity = &(this->facet_connectivities_[fa]);
+    facet_connectivity->valence = 0;
+    facet_connectivity->he = kHEInvalid;
+    facet_connectivity->fa_free = kFAFreeInvalid;
+  }
+
+  virtual void FAClear(FAIndex fa) {
+    FacetConnectivity* facet_connectivity = this->FAMutableConnectivity(fa);
+    facet_connectivity->valence = 0;
+    facet_connectivity->he = kHEInvalid;
+    facet_connectivity->fa_free = kFAInvalid;
+  }
+
+  virtual void FADisplay(FAIndex fa, std::string *buffer) const {
+    CHECK_NE(buffer, nullptr);
+    const HEIndex he_begin = this->FAGetHE(fa); 
+    absl::StrAppend(buffer, "      he", he_begin, "\n");    
+
+    // Vertex neighbors.
+    HEIndex he = he_begin;
+    absl::StrAppend(buffer, "     ");
+    if (he != kHEInvalid) {
+      do {
+	absl::StrAppend(buffer, " vx", this->HEGetVX(he));
+	he = this->HEGetFANext(he);
+      } while (he != he_begin);
+    }
+    absl::StrAppend(buffer, "\n");
+    
+    // Facet neighbors.
+    he = he_begin;
+    absl::StrAppend(buffer, "     ");
+    if (he != kHEInvalid) {
+      do {
+	absl::StrAppend(buffer, " fa", this->HEGetFA(this->HEGetHE(he)));
+	he = this->HEGetFANext(he);
+      } while (he != he_begin);
+    }
+    absl::StrAppend(buffer, "\n");
+  }
+  
+  // Edge methods.
+
+  bool IsValidEIndex(EIndex e) const {
+    return EIndex(0) < e && e < static_cast<int>(this->edge_connectivities_.size());
+  }
+
+  bool IsAllocatedEIndex(EIndex e) const {
+    if (!this->IsValidEIndex(e)) {
+      return false;
+    }
+    return this->edge_connectivities_[e].IsAllocated();
+  }
+
+  const EdgeConnectivity& EGetConnectivity(EIndex e) const {
+    CHECK(this->IsValidEIndex(e));
+    const EdgeConnectivity& edge_connectivity = this->edge_connectivities_[e];
+    CHECK(edge_connectivity.IsAllocated());
+    return edge_connectivity;
+  }
+
+  EdgeConnectivity* EMutableConnectivity(EIndex e) {
+    CHECK(this->IsValidEIndex(e));
+    EdgeConnectivity* edge_connectivity = &(this->edge_connectivities_[e]);
+    CHECK(edge_connectivity->IsAllocated());
+    return edge_connectivity;
+  }
+
+  // Resize the edge arrays to add a new edge.
+  virtual EIndex ENew() {
+    const EIndex e = static_cast<EIndex>(this->edge_connectivities_.size());
+    this->edge_connectivities_.resize(static_cast<int>(e) + 1);
+    // Allocate the two associated half edges.
+    this->HENew();
+    return e;
+  }
+
+  virtual void EInit(EIndex e) {
+    CHECK(this->IsValidEIndex(e));
+    EdgeConnectivity* edge_connectivity = &(this->edge_connectivities_[e]);
+    edge_connectivity->e_free = kEFreeInvalid;
+
+    const HEIndex he = this->EGetHE(e);
+    const HEIndex hes[2] = {he, this->HEGetHE(he)};
+    HalfEdgeConnectivity* half_edge_connectivities[2];
+    for (int i = 0; i < 2; ++i) {
+      this->HEInit(hes[i]);
+      half_edge_connectivities[i] = &(this->half_edge_connectivities_[hes[i]]);
+    }
+    half_edge_connectivities[0]->he_fa_next = hes[1];
+    half_edge_connectivities[1]->he_fa_next = hes[0];    
+  }
+
+  virtual void EClear(EIndex e) {
+    EdgeConnectivity* edge_connectivity = this->EMutableConnectivity(e);
+    edge_connectivity->e_free = kEInvalid;
+  }
+
+  // Half_Edge methods.
+
+  bool IsValidHEIndex(HEIndex he) const {
+    return this->IsValidEIndex(this->HEGetE(he));
+  }
+
+  bool IsAllocatedHEIndex(HEIndex he) const {
+    return this->IsAllocatedEIndex(this->HEGetE(he));
+  }
+
+  const HalfEdgeConnectivity& HEGetConnectivity(HEIndex he) const {
+    CHECK(this->IsAllocatedEIndex(this->HEGetE(he)));
+    return this->half_edge_connectivities_[he];
+  }
+
+  HalfEdgeConnectivity* HEMutableConnectivity(HEIndex he) {
+    CHECK(this->IsAllocatedEIndex(this->HEGetE(he)));
+    return &(this->half_edge_connectivities_[he]);
+  }
+
+  // Resize the half edge arrays to add two new half edges.
+  virtual void HENew() {
+    this->half_edge_connectivities_.resize(this->half_edge_connectivities_.size() + 2);
+  }
+
+  virtual void HEInit(HEIndex he) {
+    CHECK(this->IsValidHEIndex(he));
+    HalfEdgeConnectivity* half_edge_connectivity = &(this->half_edge_connectivities_[he]);
+    half_edge_connectivity->vx = kVXInvalid;
+    half_edge_connectivity->fa = kFAInvalid;
+    half_edge_connectivity->he_vx_next = he;
+    half_edge_connectivity->he_fa_next = kHEInvalid;
+  }
+
+  virtual void HEClear(HEIndex he) {
+    HalfEdgeConnectivity* half_edge_connectivity = this->HEMutableConnectivity(he);
+    half_edge_connectivity->vx = kVXInvalid;
+    half_edge_connectivity->fa = kFAInvalid;
+    half_edge_connectivity->he_vx_next = kHEInvalid;
+    half_edge_connectivity->he_fa_next = kHEInvalid;
+  }
+
+  virtual void HEDisplay(HEIndex he, std::string *buffer) const {
+    CHECK_NE(buffer, nullptr);
+    absl::StrAppend(buffer, "      vx", this->HEGetVX(he), " : he", this->HEGetVXNext(he), "\n");
+    absl::StrAppend(buffer, "      fa", this->HEGetFA(he), " : he", this->HEGetFANext(he), "\n");
+  }
+  
   // Allocated vertex indices. 
   std::unordered_set<VXIndex> vxs_;
   std::vector<VertexConnectivity> vertex_connectivities_;  
+
+  // Allocated facet indices. 
+  std::unordered_set<FAIndex> fas_;
+  std::vector<FacetConnectivity> facet_connectivities_;  
+
+  // Allocated edge indices. 
+  std::unordered_set<EIndex> es_;
+  std::vector<EdgeConnectivity> edge_connectivities_;  
+
+  std::vector<HalfEdgeConnectivity> half_edge_connectivities_;
+
+  std::unordered_set<HEIndex> boundary_hes_;
 };  // class MeshConnectivity
 
 }  // namespace hemesh

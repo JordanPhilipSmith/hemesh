@@ -1,0 +1,31 @@
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+  name = "map_util",
+  hdrs = [
+    "map_util.h",
+  ],
+)
+
+cc_test(
+  name = "map_util_test",
+  srcs = [
+    ":tests/map_util_test.cc",
+  ],
+  deps = [
+    ":map_util",
+    "@com_google_googletest//:gtest_main",
+  ],
+)
+
+cc_library(
+  name = "heap",
+  hdrs = [
+    "heap.h",
+  ],
+  deps = [
+    "@abseil-cpp//absl/log",
+    "@abseil-cpp//absl/log:check",
+    "@abseil-cpp//absl/strings",
+  ],
+)
