@@ -1,0 +1,74 @@
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+  name = "math_limits",
+  hdrs = [
+    "math_limits.h",
+  ],
+  deps = [
+    "@abseil-cpp//absl/strings",
+    "@abseil-cpp//absl/strings:str_format",
+  ],
+)
+
+cc_library(
+  name = "vector",
+  hdrs = [
+    "vector.h",
+    "vector_impl.h",
+    "vector2.h",
+  ],
+  copts = ["-Iexternal/eigen"],
+  deps = [
+    "@abseil-cpp//absl/strings",
+    "@abseil-cpp//absl/strings:str_format",
+    "@eigen//:eigen",
+  ],
+)
+
+cc_library(
+  name = "bounding_box",
+  hdrs = [
+    "bounding_box.h",
+  ],
+  deps = [
+    ":math_limits",
+    ":vector",
+  ],
+)
+
+# Tests.
+
+cc_test(
+  name = "math_limits_test",
+  srcs = [
+    ":tests/math_limits_test.cc",
+  ],
+  deps = [
+    ":math_limits",
+    "@com_google_googletest//:gtest_main",
+  ],
+)
+
+cc_test(
+  name = "vector2_test",
+  srcs = [
+    ":tests/vector2_test.cc",
+  ],
+  deps = [
+    ":vector",
+    "@com_google_googletest//:gtest_main",
+  ],
+)
+
+cc_test(
+  name = "bounding_box2_test",
+  srcs = [
+    ":tests/bounding_box2_test.cc",
+  ],
+  deps = [
+    ":bounding_box",
+    ":vector",
+    "@com_google_googletest//:gtest_main",
+  ],
+)

@@ -1,3 +1,8 @@
 hemesh - Half edge mesh library for surface meshing and computational geometry.
-Author: Jordan Smith
+
+Author: Jordan Smith (jordan.philip.smith@gmail.com)
 Date: April 25, 2024
+
+See docs/delaunay.html for more information.
+
+This was developed on a Macbook, and it has only been built on the Macbook.

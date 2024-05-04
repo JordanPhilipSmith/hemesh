@@ -1,0 +1,23 @@
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+  name = "delaunay_predicates",
+  hdrs = [
+    "delaunay_predicates.h",
+  ],
+  deps = [
+    "//cc/math:vector",
+  ],
+)
+
+cc_test(
+  name = "delaunay_predicates_test",
+  srcs = [
+    ":tests/delaunay_predicates_test.cc",
+  ],
+  deps = [
+    ":delaunay_predicates",
+    "//cc/math:vector",
+    "@com_google_googletest//:gtest_main",
+  ],
+)

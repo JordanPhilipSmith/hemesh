@@ -1,0 +1,101 @@
+<html>
+<header>
+</header>
+<body>
+  <h1>Half Edge Mesh</h1>
+
+  <p>
+    <b>Author:</b> Jordan Smith (jordan.philip.smith@gmail.com)
+    <br>
+    <b>Date:</b> May 3, 2024
+  </p>
+
+  <p>
+    Half edge mesh to represent 2-manifolds.  This is a modification of the quad edge data
+    structure. The 2-manifold surface mesh is made up of vertices, facets, and half edges.
+  </p>
+
+  <h2>Vertex:</h2>
+  <p>
+    The vertex contains the position.  The vertex points to one half edge in its CCW
+    (counterclockwise) half edge ring.  The valence is the number of half edges (i.e. vertex
+    neighbors).
+  </p>
+
+  <h2>Facet:</h2>
+  <p>
+    A facet is a simple face loop.  The facet points to one half edge in its CCW half edge ring.
+    The valence is the number of half edges (i.e. vertices).
+  </p>
+
+  <h2>Edge and Half Edge:</h2>
+  <p>
+    Every edge is represented by two opposite direction half edge pairs.  The half edge from
+    V1->V2 has an opposite partner pair from V2->V1.  An edge and its two half edges are allocated
+    and deallocated as a unit using HEAllocate() (one of the two half edges is returned).
+  </p>
+
+  <p>
+    Each half edge points to a vertex, a facet, its opposite partner half edge, its edge, the next
+    half edge around the vertex, and the next half edge around the facet.
+  </p>
+
+  <p>
+    Half edges on the boundary of the mesh point to the invalid facet (kFAInvalid).  There may be
+    multiple connected components, so it is not possible to represent the boundary area with a
+    single simple facet.  The boundary half edges are members of a set, hence the boundary can be
+    iterated over.
+  </p>
+
+  
+  <h1>Example</h1>
+  <p>Run</p>
+  <p style="font-family:'Courier New'">tools/delaunay_example.bash</p>
+  <p>
+    to generate random points, the Delaunay triangulation, and the convex hull. This runs the
+    following tools.
+  </p>
+
+  <h2>random_points_cli</h2>
+  <p>
+    Generates N random points within a 2D bounding box.
+  </p>
+  <p style="font-family:'Courier New'">tools:random_points_cli</p>
+
+  <h2>delaunay_triangulator_cli</h2>
+  <p>
+    Generates the Delaunay triangulation of a set of 2D points represented by the vertex information
+    only of a .obj file.
+  </p>
+  <p style="font-family:'Courier New'">tools:delaunay_triangulator_cli</p>
+
+  <h2>convex_hull_2d_cli</h2>
+  <p>
+    Generates the 2D convex hull of a set of 2D points represented by the vertex information
+    only of a .obj file.
+  </p>
+  <p style="font-family:'Courier New'">tools:convex_hull_2d_cli</p>
+
+  <h2>obj_to_svg_cli</h2>
+  <p>
+    Converts the edges of a polygon mesh stored as a .obj file to a .svg file.
+  </p>
+  <p style="font-family:'Courier New'">tools:obj_to_svg_cli</p>
+
+  <h1>Results</h1>
+
+  <h2>Delaunay Triangulation</h2>
+  <p>
+    The random points are the vertices of the Delaunay triangulation.  A property of the Delaunay
+    tringulation is that the circumcircle of each Delaunay triangle is empty of all other vertices.
+  </p>
+  <img src="../data/svg/random_1000_delaunay.svg">
+  
+  <h3>Convex Hull</h3>
+  <p>
+    The boundary of the Delaunay triangulation is the convex hull polygon of the points. Here is
+    the convex hull of the random points.
+  </p>
+  <img src="../data/svg/random_1000_convex_hull.svg">
+</body>
+</html>

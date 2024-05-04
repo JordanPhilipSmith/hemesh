@@ -1,0 +1,164 @@
+#load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+  name = "hemesh",
+  hdrs = [
+    "hemesh.h",
+    "hemesh_geometry.h",
+  ],
+  copts = ["-Wc++17-extensions"],
+  deps = [
+    "//cc/math:vector",
+    "@abseil-cpp//absl/log",
+    "@abseil-cpp//absl/log:check",
+    "@abseil-cpp//absl/strings",
+  ],
+)
+
+cc_library(
+  name = "hemesh_geometry_util",
+  hdrs = [
+    "hemesh_geometry_util.h",
+  ],
+  deps = [
+    ":hemesh",
+    "//cc/math:bounding_box",
+    "//cc/math:vector",
+  ],
+)
+
+cc_library(
+  name = "hemesh_io_obj",
+  hdrs = [
+    "hemesh_io_obj.h",
+  ],
+  deps = [
+    ":hemesh",
+    "//cc/math:vector",
+    "@abseil-cpp//absl/log",
+    "@abseil-cpp//absl/log:check",
+    "@abseil-cpp//absl/status",
+    "@abseil-cpp//absl/status:statusor",
+    "@abseil-cpp//absl/strings",
+  ],
+)
+
+cc_library(
+  name = "hemesh_io_svg",
+  hdrs = [
+    "hemesh_io_svg.h",
+  ],
+  deps = [
+    ":hemesh",
+    ":hemesh_geometry_util",
+    "//cc/math:bounding_box",
+    "//cc/math:vector",
+    "@abseil-cpp//absl/log:check",
+    "@abseil-cpp//absl/status:statusor",
+    "@abseil-cpp//absl/strings",
+  ],
+)
+
+cc_library(
+  name = "convex_hull_2d",
+  hdrs = [
+    "convex_hull_2d.h",
+  ],
+  deps = [
+    ":hemesh",
+    "//cc/geom:delaunay_predicates",
+    "//cc/math:vector",
+    "@abseil-cpp//absl/log",
+    "@abseil-cpp//absl/log:check",
+  ],
+)
+
+cc_library(
+  name = "delaunay_triangulator",
+  hdrs = [
+    "delaunay_triangulator.h",
+  ],
+  deps = [
+    ":hemesh",
+    "//cc/geom:delaunay_predicates",
+    "//cc/math:vector",
+    "@abseil-cpp//absl/log",
+    "@abseil-cpp//absl/log:check",
+  ],
+)
+
+# Tests.
+
+cc_test(
+  name = "hemesh_geometry_test",
+  srcs = [
+    ":tests/hemesh_geometry_test.cc",
+  ],
+  deps = [
+    ":hemesh",
+    "//cc/math:vector",
+    "@com_google_googletest//:gtest_main",
+  ],
+)
+
+cc_test(
+  name = "hemesh_io_obj_test",
+  srcs = [
+    ":tests/hemesh_io_obj_test.cc",
+  ],
+  deps = [
+    ":hemesh",
+    ":hemesh_io_obj",
+    "//cc/math:vector",
+    "@abseil-cpp//absl/status",
+    "@abseil-cpp//absl/status:statusor",
+    "@com_google_googletest//:gtest_main",
+  ],
+)
+
+cc_test(
+  name = "hemesh_io_svg_test",
+  srcs = [
+    ":tests/hemesh_io_svg_test.cc",
+  ],
+  deps = [
+    ":hemesh",
+    ":hemesh_io_obj",
+    ":hemesh_io_svg",
+    "//cc/math:bounding_box",
+    "@abseil-cpp//absl/status:statusor",
+    "@com_google_googletest//:gtest_main",
+  ],
+)
+
+cc_test(
+  name = "convex_hull_2d_test",
+  srcs = [
+    ":tests/convex_hull_2d_test.cc",
+  ],
+  deps = [
+    ":convex_hull_2d",
+    ":hemesh",
+    "//cc/container:map_util",
+    "//cc/geom:delaunay_predicates",
+    "//cc/math:vector",
+    "@com_google_googletest//:gtest_main",
+  ],
+)
+
+cc_test(
+  name = "delaunay_triangulator_test",
+  srcs = [
+    ":tests/delaunay_triangulator_test.cc",
+  ],
+  deps = [
+    ":delaunay_triangulator",
+    ":hemesh",
+    "//cc/container:map_util",
+    "//cc/geom:delaunay_predicates",
+    "//cc/math:vector",
+    "@com_google_googletest//:gtest_main",
+  ],
+)
