@@ -10,7 +10,6 @@ cc_binary(
     "random_points_cli.cc",
   ],
   deps = [
-    "//cc/file:file_helper",
     "//cc/hemesh:hemesh",
     "//cc/hemesh:hemesh_io_obj",
     "//cc/math:vector",
@@ -19,8 +18,9 @@ cc_binary(
     "@abseil-cpp//absl/flags:parse",
     "@abseil-cpp//absl/log",
     "@abseil-cpp//absl/status",
-    "@abseil-cpp//absl/status:statusor",
     "@abseil-cpp//absl/strings",
+    "@absl_util//cc/file:file_helpers",
+    "@absl_util//cc/status:status_macros",
   ],
 )
 
@@ -30,7 +30,6 @@ cc_binary(
     "obj_to_svg_cli.cc",
   ],
   deps = [
-    "//cc/file:file_helper",
     "//cc/hemesh:hemesh",
     "//cc/hemesh:hemesh_io_obj",
     "//cc/hemesh:hemesh_io_svg",
@@ -39,8 +38,9 @@ cc_binary(
     "@abseil-cpp//absl/flags:parse",
     "@abseil-cpp//absl/log",
     "@abseil-cpp//absl/status",
-    "@abseil-cpp//absl/status:statusor",
     "@abseil-cpp//absl/strings",
+    "@absl_util//cc/file:file_helpers",
+    "@absl_util//cc/status:status_macros",
   ],
 )
 
@@ -50,7 +50,6 @@ cc_binary(
     "convex_hull_2d_cli.cc",
   ],
   deps = [
-    "//cc/file:file_helper",
     "//cc/geom:delaunay_predicates",
     "//cc/hemesh:convex_hull_2d",
     "//cc/hemesh:hemesh",
@@ -61,8 +60,9 @@ cc_binary(
     "@abseil-cpp//absl/flags:parse",
     "@abseil-cpp//absl/log",
     "@abseil-cpp//absl/status",
-    "@abseil-cpp//absl/status:statusor",
     "@abseil-cpp//absl/strings",
+    "@absl_util//cc/file:file_helpers",
+    "@absl_util//cc/status:status_macros",
   ],
 )
 
@@ -72,7 +72,6 @@ cc_binary(
     "delaunay_triangulator_cli.cc",
   ],
   deps = [
-    "//cc/file:file_helper",
     "//cc/geom:delaunay_predicates",
     "//cc/hemesh:delaunay_triangulator",
     "//cc/hemesh:hemesh",
@@ -83,7 +82,8 @@ cc_binary(
     "@abseil-cpp//absl/flags:parse",
     "@abseil-cpp//absl/log",
     "@abseil-cpp//absl/status",
-    "@abseil-cpp//absl/status:statusor",
     "@abseil-cpp//absl/strings",
+    "@absl_util//cc/file:file_helpers",
+    "@absl_util//cc/status:status_macros",
   ],
 )

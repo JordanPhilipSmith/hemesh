@@ -1,0 +1,1 @@
+build:macos --cxxopt='-std=c++17'

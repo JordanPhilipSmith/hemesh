@@ -31,6 +31,10 @@ class MeshGeometry : public MeshConnectivity {
 
  protected:
   struct VertexGeometry {
+    void Clear() {
+      this->point.setZero();
+    }
+
     math::VectorOwned<ScalarT, dim> point;
   };  // struct VertexGeometry
 
@@ -49,20 +53,18 @@ class MeshGeometry : public MeshConnectivity {
   VXIndex VXNew() override {
     const VXIndex vx = MeshConnectivity::VXNew();
 
-    this->vertex_geometries_.resize(vx + 1);
+    this->vertex_geometries_.resize(static_cast<std::size_t>(vx) + 1);
     return vx;
   }
 
   void VXInit(VXIndex vx) override {
     MeshConnectivity::VXInit(vx);
 
-    VertexGeometry* vertex_geometry = &(this->vertex_geometries_[vx]);
-    vertex_geometry->point.setZero();
+    this->vertex_geometries_[vx].Clear();
   }
 
   void VXClear(VXIndex vx) override {
-    VertexGeometry* vertex_geometry = this->VXMutableGeometry(vx);
-    vertex_geometry->point.setZero();
+    this->VXMutableGeometry(vx)->Clear();
 
     MeshConnectivity::VXClear(vx);
   }

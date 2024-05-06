@@ -691,6 +691,12 @@ class MeshConnectivity {
       return this->vx_free == kVXFreeInvalid;
     }
 
+    void Clear() {
+      this->valence = 0;
+      this->he = kHEInvalid;
+      this->vx_free = kVXInvalid;
+    }
+    
     int valence = 0;
     // One half edge in the vertex ring.
     HEIndex he = kHEInvalid;
@@ -702,6 +708,12 @@ class MeshConnectivity {
       return this->fa_free == kFAFreeInvalid;
     }
 
+    void Clear() {
+      this->valence = 0;
+      this->he = kHEInvalid;
+      this->fa_free = kFAInvalid;
+    }
+    
     int valence = 0;
     // One half edge in the facet ring.
     HEIndex he = kHEInvalid;
@@ -713,16 +725,25 @@ class MeshConnectivity {
       return this->e_free == kEFreeInvalid;
     }
 
+    void Clear() {
+      this->e_free = kEInvalid;
+    }
+    
     FAIndex e_free = kEFreeInvalid;
   };  // struct EdgeConnectivity
 
   struct HalfEdgeConnectivity {
+    void Clear() {
+      this->vx = kVXInvalid;
+      this->fa = kFAInvalid;
+      this->he_vx_next = kHEInvalid;
+      this->he_fa_next = kHEInvalid;
+    }
+    
     // Origin vertex of the half edge.
     VXIndex vx = kVXInvalid;
     // Left facet of the half edge.
     FAIndex fa = kFAInvalid;
-    // Opposite direction partner half edge.
-    HEIndex he = kHEInvalid;
     // Next half edge in the vertex loop.
     HEIndex he_vx_next = kHEInvalid;
     // Next half edge in the facet loop.
@@ -759,23 +780,19 @@ class MeshConnectivity {
   // Resize the vertex arrays to add a new vertex.
   virtual VXIndex VXNew() {
     VXIndex vx = static_cast<VXIndex>(this->vertex_connectivities_.size());
-    this->vertex_connectivities_.resize(vx + 1);
+    this->vertex_connectivities_.resize(static_cast<std::size_t>(vx) + 1);
     return vx;
   }
 
   virtual void VXInit(VXIndex vx) {
     CHECK(this->IsValidVXIndex(vx));
     VertexConnectivity* vertex_connectivity = &(this->vertex_connectivities_[vx]);
-    vertex_connectivity->valence = 0;
-    vertex_connectivity->he = kHEInvalid;
+    vertex_connectivity->Clear();
     vertex_connectivity->vx_free = kVXFreeInvalid;
   }
 
   virtual void VXClear(VXIndex vx) {
-    VertexConnectivity* vertex_connectivity = this->VXMutableConnectivity(vx);
-    vertex_connectivity->valence = 0;
-    vertex_connectivity->he = kHEInvalid;
-    vertex_connectivity->vx_free = kVXInvalid;
+    this->VXMutableConnectivity(vx)->Clear();
   }
 
   virtual void VXDisplay(VXIndex vx, std::string *buffer) const {
@@ -836,23 +853,19 @@ class MeshConnectivity {
   // Resize the facet arrays to add a new facet.
   virtual FAIndex FANew() {
     FAIndex fa = static_cast<FAIndex>(this->facet_connectivities_.size());
-    this->facet_connectivities_.resize(fa + 1);
+    this->facet_connectivities_.resize(static_cast<std::size_t>(fa) + 1);
     return fa;
   }
 
   virtual void FAInit(FAIndex fa) {
     CHECK(this->IsValidFAIndex(fa));
     FacetConnectivity* facet_connectivity = &(this->facet_connectivities_[fa]);
-    facet_connectivity->valence = 0;
-    facet_connectivity->he = kHEInvalid;
+    facet_connectivity->Clear();
     facet_connectivity->fa_free = kFAFreeInvalid;
   }
 
   virtual void FAClear(FAIndex fa) {
-    FacetConnectivity* facet_connectivity = this->FAMutableConnectivity(fa);
-    facet_connectivity->valence = 0;
-    facet_connectivity->he = kHEInvalid;
-    facet_connectivity->fa_free = kFAInvalid;
+    this->FAMutableConnectivity(fa)->Clear();
   }
 
   virtual void FADisplay(FAIndex fa, std::string *buffer) const {
@@ -913,7 +926,7 @@ class MeshConnectivity {
   // Resize the edge arrays to add a new edge.
   virtual EIndex ENew() {
     const EIndex e = static_cast<EIndex>(this->edge_connectivities_.size());
-    this->edge_connectivities_.resize(static_cast<int>(e) + 1);
+    this->edge_connectivities_.resize(static_cast<std::size_t>(e) + 1);
     // Allocate the two associated half edges.
     this->HENew();
     return e;
@@ -922,6 +935,7 @@ class MeshConnectivity {
   virtual void EInit(EIndex e) {
     CHECK(this->IsValidEIndex(e));
     EdgeConnectivity* edge_connectivity = &(this->edge_connectivities_[e]);
+    edge_connectivity->Clear();
     edge_connectivity->e_free = kEFreeInvalid;
 
     const HEIndex he = this->EGetHE(e);
@@ -936,8 +950,7 @@ class MeshConnectivity {
   }
 
   virtual void EClear(EIndex e) {
-    EdgeConnectivity* edge_connectivity = this->EMutableConnectivity(e);
-    edge_connectivity->e_free = kEInvalid;
+    this->EMutableConnectivity(e)->Clear();
   }
 
   // Half_Edge methods.
@@ -968,18 +981,12 @@ class MeshConnectivity {
   virtual void HEInit(HEIndex he) {
     CHECK(this->IsValidHEIndex(he));
     HalfEdgeConnectivity* half_edge_connectivity = &(this->half_edge_connectivities_[he]);
-    half_edge_connectivity->vx = kVXInvalid;
-    half_edge_connectivity->fa = kFAInvalid;
+    half_edge_connectivity->Clear();
     half_edge_connectivity->he_vx_next = he;
-    half_edge_connectivity->he_fa_next = kHEInvalid;
   }
 
   virtual void HEClear(HEIndex he) {
-    HalfEdgeConnectivity* half_edge_connectivity = this->HEMutableConnectivity(he);
-    half_edge_connectivity->vx = kVXInvalid;
-    half_edge_connectivity->fa = kFAInvalid;
-    half_edge_connectivity->he_vx_next = kHEInvalid;
-    half_edge_connectivity->he_fa_next = kHEInvalid;
+    this->HEMutableConnectivity(he)->Clear();
   }
 
   virtual void HEDisplay(HEIndex he, std::string *buffer) const {
