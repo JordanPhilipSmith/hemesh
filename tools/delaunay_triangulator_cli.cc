@@ -9,19 +9,19 @@
 #include <string>
 #include <vector>
 
-#include "cc/file/file_helper.h"
-#include "cc/geom/delaunay_predicates.h"
-#include "cc/hemesh/delaunay_triangulator.h"
-#include "cc/hemesh/hemesh_geometry.h"
-#include "cc/hemesh/hemesh_io_obj.h"
-#include "cc/math/vector2.h"
 #include "absl/flags/commandlineflag.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "cc/file/file_helpers.h"
+#include "cc/geom/delaunay_predicates.h"
+#include "cc/hemesh/delaunay_triangulator.h"
+#include "cc/hemesh/hemesh_geometry.h"
+#include "cc/hemesh/hemesh_io_obj.h"
+#include "cc/math/vector2.h"
+#include "cc/status/status_macros.h"
 
 ABSL_FLAG(std::string, input_points_obj, "", "Input .obj file with vertex points only.");
 ABSL_FLAG(std::string, output_delaunay_obj, "", "Output 2D Delaunay triangulation .obj file.");
@@ -42,18 +42,12 @@ absl::Status Main(absl::string_view input_points_obj_filename,
   }
 
   LOG(INFO) << "BEGIN: Read points from .obj file.";  
-  absl::StatusOr<std::string> input_buffer_or = file::GetContents(input_points_obj_filename);
-  if (!input_buffer_or.ok()) {
-    return input_buffer_or.status();
-  }
-  const std::string& input_buffer = *input_buffer_or;
+  std::string input_buffer;
+  RETURN_IF_ERROR(file::GetContents(input_points_obj_filename, &input_buffer));
   LOG(INFO) << "  BEGIN: Parse points from .obj file.";  
-  absl::StatusOr<std::unique_ptr<MeshGeometry<double, 2>>> points_mesh_or =
-      hemesh::io::FromObj<double, 2>(input_buffer);
-  if (!points_mesh_or.ok()) {
-    return points_mesh_or.status();
-  }
-  std::unique_ptr<MeshGeometry<double, 2>> points_mesh = *std::move(points_mesh_or);
+  using MeshGeometryT = MeshGeometry<double, 2>;
+  ASSIGN_OR_RETURN(std::unique_ptr<MeshGeometryT> points_mesh,
+                   (hemesh::io::FromObj<double, 2>(input_buffer)));
   LOG(INFO) << "  END  : Parse points from .obj file.";  
   LOG(INFO) << "END  : Read points from .obj file.";  
 
@@ -72,11 +66,7 @@ absl::Status Main(absl::string_view input_points_obj_filename,
       delaunay_triangulator->Triangulate(points, index_for_vx);
 
   LOG(INFO) << "BEGIN: Write 2D Delaunay triangulation to .obj file.";  
-  absl::StatusOr<std::string> output_buffer_or = hemesh::io::ToObj<double, 2>(*mesh);
-  if (!output_buffer_or.ok()) {
-    return output_buffer_or.status();
-  }
-  const std::string& output_buffer = *output_buffer_or;
+  ASSIGN_OR_RETURN(const std::string output_buffer, (hemesh::io::ToObj<double, 2>(*mesh)));
   absl::Status status = file::SetContents(output_delaunay_obj_filename, output_buffer);
   LOG(INFO) << "END  : Write 2D Delaunay triangulation to .obj file.";  
 

@@ -13,18 +13,18 @@
 #include <cstdlib>
 #include <string>
 
-#include "cc/file/file_helper.h"
-#include "cc/hemesh/hemesh_geometry.h"
-#include "cc/hemesh/hemesh_io_obj.h"
-#include "cc/math/vector2.h"
 #include "absl/flags/commandlineflag.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "cc/file/file_helpers.h"
+#include "cc/hemesh/hemesh_geometry.h"
+#include "cc/hemesh/hemesh_io_obj.h"
+#include "cc/math/vector2.h"
+#include "cc/status/status_macros.h"
 
 ABSL_FLAG(int, input_points_size, 10, "Number of points to generate.");
 ABSL_FLAG(double, input_x_min, 0.0, "Bounding box x_min.");
@@ -89,12 +89,8 @@ absl::Status Main(int input_points_size,
     mesh.VXMutablePoint(vx) = point;
   }
 
-  LOG(INFO) << "BEGIN: Write 2D points to .obj file.";  
-  absl::StatusOr<std::string> output_buffer_or = hemesh::io::ToObj<double, 2>(mesh);
-  if (!output_buffer_or.ok()) {
-    return output_buffer_or.status();
-  }
-  const std::string& output_buffer = *output_buffer_or;
+  LOG(INFO) << "BEGIN: Write 2D points to .obj file.";
+  ASSIGN_OR_RETURN(const std::string output_buffer, (hemesh::io::ToObj<double, 2>(mesh)));
   absl::Status status = file::SetContents(output_points_obj_filename, output_buffer);
   LOG(INFO) << "END  : Write 2D points to .obj file.";  
 

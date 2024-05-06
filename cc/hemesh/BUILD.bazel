@@ -8,7 +8,6 @@ cc_library(
     "hemesh.h",
     "hemesh_geometry.h",
   ],
-  copts = ["-Wc++17-extensions"],
   deps = [
     "//cc/math:vector",
     "@abseil-cpp//absl/log",
