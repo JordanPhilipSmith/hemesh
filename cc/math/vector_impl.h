@@ -9,10 +9,26 @@
 namespace math {
 
 template <class ScalarT, int dim>
+using Vector = Eigen::Matrix<ScalarT, dim, 1>;  
+
+template <class ScalarT, int dim>
 using VectorOwned = Eigen::Matrix<ScalarT, dim, 1>;  
 
 template <class ScalarT, int dim>
 using ConstVector = Eigen::Matrix<ScalarT, dim, 1>;  
+
+// Returns a read only view of a subvector of rows in [begin_row, begin_row + subdim).
+template<class ScalarT, int dim, int subdim>
+const auto Subvector(
+    const ConstVector<ScalarT, dim>& v, int begin_row) {
+  return v.template block<subdim, 1>(begin_row, 0);
+}
+
+// Returns a mutable view of a subvector of rows in [begin_row, begin_row + subdim).
+template<class ScalarT, int dim, int subdim>
+auto Subvector(Vector<ScalarT, dim>& v, int begin_row) {
+  return v.template block<subdim, 1>(begin_row, 0);
+}
 
 template <class ScalarT, int dim>
 ScalarT Magnitude2(const ConstVector<ScalarT, dim>& v) {
