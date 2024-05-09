@@ -54,13 +54,28 @@ TEST(Vector2Test, Normal) {
 TEST(Vector2Test, Subvector) {
   VectorOwned<double, 3> v3({1.0, 2.0, 3.0});    
 
-  VectorOwned<double, 2> v2 = Subvector<double, 3, 2>(v3, 1);
+  VectorOwned<double, 2> v2 = Subvector<2, double, 3>(v3, 1);
 
   const VectorOwned<double, 2> expected_v2({2.0, 3.0});
   EXPECT_EQ(v2, expected_v2);
 
   v2 *= 10.0;
-  Subvector<double, 3, 2>(v3, 1) = v2;
+  Subvector<2, double, 3>(v3, 1) = v2;
+
+  const VectorOwned<double, 3> expected_v3({1.0, 20.0, 30.0});
+  EXPECT_EQ(v3, expected_v3);  
+}
+  
+TEST(Vector2Test, SubvectorAutoTemplateTypes) {
+  VectorOwned<double, 3> v3({1.0, 2.0, 3.0});    
+
+  VectorOwned<double, 2> v2 = Subvector<2>(v3, 1);
+
+  const VectorOwned<double, 2> expected_v2({2.0, 3.0});
+  EXPECT_EQ(v2, expected_v2);
+
+  v2 *= 10.0;
+  Subvector<2>(v3, 1) = v2;
 
   const VectorOwned<double, 3> expected_v3({1.0, 20.0, 30.0});
   EXPECT_EQ(v3, expected_v3);  
