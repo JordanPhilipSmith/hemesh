@@ -24,14 +24,20 @@
 #include "cc/status/status_macros.h"
 
 ABSL_FLAG(std::string, input_points_obj, "", "Input .obj file with vertex points only.");
+ABSL_FLAG(
+    bool, input_keep_collinear_points, false,
+    "Always remove coincident points.  If true, include points that are on the interior of"
+    " collinear edges.  If false, only include the endpoints of convex hull edges.");
 ABSL_FLAG(std::string, output_convex_hull_obj, "", "Output 2D convex hull .obj file.");
 
 namespace hemesh {
 namespace {
 
 absl::Status Main(absl::string_view input_points_obj_filename,
+                  bool input_keep_collinear_points,
                   absl::string_view output_convex_hull_obj_filename) {
   LOG(INFO) << "--input_points_obj = \"" << input_points_obj_filename << "\"";
+  LOG(INFO) << "--input_keep_collinear_points = " << input_keep_collinear_points;
   LOG(INFO) << "--output_convex_hull_obj = \"" << output_convex_hull_obj_filename << "\"";
   
   if (input_points_obj_filename.empty()) {
@@ -62,8 +68,8 @@ absl::Status Main(absl::string_view input_points_obj_filename,
       ConvexHull2D<double>::New(geom::DelaunayPredicates<double>::NewLocalOrigin());
 
   std::unordered_map<VXIndex, int>* index_for_vx = nullptr;
-  std::unique_ptr<MeshGeometry<double, 2>> mesh =
-      convex_hull_2d_creator->CreateConvexHull(points, index_for_vx);
+  std::unique_ptr<MeshGeometry<double, 2>> mesh = convex_hull_2d_creator->CreateConvexHull(
+      points, input_keep_collinear_points, index_for_vx);
 
   LOG(INFO) << "BEGIN: Write 2D convex hull to .obj file.";  
   ASSIGN_OR_RETURN(const std::string output_buffer, (hemesh::io::ToObj<double, 2>(*mesh)));
@@ -80,7 +86,9 @@ int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
 
   const absl::Status status = hemesh::Main(
-      absl::GetFlag(FLAGS_input_points_obj), absl::GetFlag(FLAGS_output_convex_hull_obj));
+      absl::GetFlag(FLAGS_input_points_obj),
+      absl::GetFlag(FLAGS_input_keep_collinear_points),
+      absl::GetFlag(FLAGS_output_convex_hull_obj));
   if (!status.ok()) {
     LOG(ERROR) << "status = " << status;
     return 1;

@@ -29,19 +29,36 @@ class ConvexHull2D {
   // Creates the convex hull of a set of 2D points.
   // Parameters:
   //   points - Set of points.
+  //   keep_collinear_points - Always remove coincident points.  If true, include points that are
+  //     on the interior of collinear edges.  If false, only include the endpoints of convex hull
+  //     edges.
   //   opt_index_for_vx - If not nullptr, receives a map from the output vx to the input indices.
   // Returns a convex hull mesh.
   virtual std::unique_ptr<MeshGeometry<ScalarT, 2>> CreateConvexHull(
       const std::vector<math::VectorOwned<ScalarT, 2>>& points,
+      bool keep_collinear_points,
       std::unordered_map<VXIndex, int>* opt_index_for_vx) const = 0;
 };  // class ConvexHull2D
 
+// Implementation.
+ 
 namespace internal {
 
 // ConvexHull2D implementation.
 template<class ScalarT>
 class ConvexHull2DImpl : public ConvexHull2D<ScalarT> {
  public:
+  // Compares two points by x and then y coordinate.
+  struct PointComparator {
+    PointComparator() = default;
+
+    // Returns true if a.x < b.x || (a.x == b.x && a.y < b.y).
+    bool operator()(const math::ConstVector<ScalarT, 2>& a,
+                    const math::ConstVector<ScalarT, 2>& b) const {
+      return a[0] < b[0] || (a[0] == b[0] && a[1] < b[1]);
+    }
+  };  // struct PointComparator
+
   // Compares two points by x and then y coordinate.
   struct PointIndexComparator {
     PointIndexComparator(const std::vector<math::VectorOwned<ScalarT, 2>>* points)
@@ -58,10 +75,11 @@ class ConvexHull2DImpl : public ConvexHull2D<ScalarT> {
       CHECK_LE(0, b_index);
       CHECK_LT(b_index, size);
       const math::ConstVector<ScalarT, 2>& b = (*(this->points))[b_index];
-      return a[0] < b[0] || (a[0] == b[0] && a[1] < b[1]);
+      return this->comparator_(a, b);
     }
 
     const std::vector<math::VectorOwned<ScalarT, 2>>* points;
+    const PointComparator comparator_;
   };  // struct PointIndexComparator
 
   // Constructor.
@@ -79,6 +97,7 @@ class ConvexHull2DImpl : public ConvexHull2D<ScalarT> {
   
   std::unique_ptr<MeshGeometry<ScalarT, 2>> CreateConvexHull(
       const std::vector<math::VectorOwned<ScalarT, 2>>& points,
+      bool keep_collinear_points,
       std::unordered_map<VXIndex, int>* opt_index_for_vx) const override {
     static constexpr ScalarT kZero(0);
 
@@ -97,9 +116,10 @@ class ConvexHull2DImpl : public ConvexHull2D<ScalarT> {
     for (int i = 0; i < size; ++i) {
       sorted_point_indices[i] = i;
     }    
+    const PointComparator point_comparator;
     const PointIndexComparator comparator(&points);
     std::sort(sorted_point_indices.begin(), sorted_point_indices.end(), comparator);
-
+    
     // Create the first vertex.
     int index = 0;
     CHECK_LT(index, size);
@@ -131,17 +151,29 @@ class ConvexHull2DImpl : public ConvexHull2D<ScalarT> {
 
     ++vertex_index;
     point_indices[vertex_index] = sorted_point_indices[index];
-    // Skip collinear points.
-    for (++index; index < size; ++index) {
-      if (this->preds_->CCWInscribedCircle_VVV(
-              points[point_indices[0]],
-              points[point_indices[vertex_index]],
-              points[sorted_point_indices[index]]) != kZero) {
-        // A non-collinear point is found.
-        break;
+    if (keep_collinear_points) {
+      // Skip duplicate vertices.
+      for (++index; index < size; ++index) {
+        if (comparator(point_indices[vertex_index], sorted_point_indices[index])) {
+          // A non-coincident point is found.
+          break;
+        }
+        // The points are coincident, so skip the previous point.
+        point_indices[vertex_index] = sorted_point_indices[index];
       }
-      // The points are collinear, so skip the previous point.
-      point_indices[vertex_index] = sorted_point_indices[index];
+    } else {
+      // Skip collinear points.
+      for (++index; index < size; ++index) {
+        if (this->preds_->CCWInscribedCircle_VVV(
+                points[point_indices[0]],
+                points[point_indices[vertex_index]],
+                points[sorted_point_indices[index]]) != kZero) {
+          // A non-collinear point is found.
+          break;
+        }
+        // The points are collinear, so skip the previous point.
+        point_indices[vertex_index] = sorted_point_indices[index];
+      }
     }
 
     // Create the second vertex.
@@ -167,78 +199,217 @@ class ConvexHull2DImpl : public ConvexHull2D<ScalarT> {
       return mesh;
     }
 
-    // Create the first triangle.
-    mesh->VXSetValence(vxs[0], 2);
-    mesh->VXSetValence(vxs[1], 2);
-
+    // Create the first triangle or collinear polyline.
     ++vertex_index;
     point_indices[vertex_index] = sorted_point_indices[index];
     
     vxs[vertex_index] = mesh->VXAllocate();
-    mesh->VXSetValence(vxs[vertex_index], 2);
     mesh->VXMutablePoint(vxs[vertex_index]) = points[point_indices[vertex_index]];
     if (index_for_vx != nullptr) {
       (*index_for_vx)[vxs[vertex_index]] = point_indices[vertex_index];
     }
+    
+    FAIndex fa = kFAInvalid;
+    HEIndex he_right = kHEInvalid;
+    const ScalarT ccw = this->preds_->CCWInscribedCircle_VVV(
+        points[point_indices[0]],
+        points[point_indices[1]],
+        points[point_indices[2]]);
+    if (keep_collinear_points && ccw == kZero) {
+      // Create a collinear polyline.
 
-    if (this->preds_->CCWInscribedCircle_VVV(
-              points[point_indices[0]],
-              points[point_indices[1]],
-              points[point_indices[2]]) < kZero) {
-      // Clockwise, so swap the first edge.
-      he = mesh->HEGetHE(he);
+      mesh->VXSetValence(vxs[1], 2);
+      mesh->VXSetValence(vxs[2], 1);
+      
+      // Create the second edge.
+      HEIndex he_prev = he;
+      he = mesh->HEAllocate();
+      mesh->VXSetHE(mesh->HEGetVX(mesh->HEGetHE(he_prev)), he);
+      mesh->HESetVX(he, mesh->HEGetVX(mesh->HEGetHE(he_prev)));
+
+      mesh->VXSetHE(vxs[2], mesh->HEGetHE(he));
+      mesh->HESetVX(mesh->HEGetHE(he), vxs[2]);
+    
+      mesh->Splice(mesh->HEGetHE(he_prev), he);
+
+      he_right = mesh->HEGetHE(he);
+    } else {
+      // Create a triangle.
+      mesh->VXSetValence(vxs[0], 2);
+      mesh->VXSetValence(vxs[1], 2);
+      mesh->VXSetValence(vxs[2], 2);
+
+      if (ccw < kZero) {
+        // Clockwise, so swap the first edge.
+        he = mesh->HEGetHE(he);
+      }
+
+      fa = mesh->FAAllocate();
+      mesh->FASetValence(fa, 3);
+      mesh->FASetHE(fa, he);
+      mesh->HESetFA(he, fa);
+
+      // Create the second edge.
+      HEIndex he_begin = he;
+      HEIndex he_prev = he;
+      he = mesh->HEAllocate();
+      mesh->HESetFA(he, fa);
+      mesh->VXSetHE(mesh->HEGetVX(mesh->HEGetHE(he_prev)), he);
+      mesh->HESetVX(he, mesh->HEGetVX(mesh->HEGetHE(he_prev)));
+
+      mesh->HESetVX(mesh->HEGetHE(he), vxs[2]);
+    
+      mesh->Splice(mesh->HEGetHE(he_prev), he);
+
+      he_prev = he;
+
+      // Create the third edge.
+      he = mesh->HEAllocate();
+      mesh->HESetFA(he, fa);
+      mesh->VXSetHE(mesh->HEGetVX(mesh->HEGetHE(he_prev)), he);
+      mesh->HESetVX(he, mesh->HEGetVX(mesh->HEGetHE(he_prev)));
+
+      mesh->HESetVX(mesh->HEGetHE(he), mesh->HEGetVX(he_begin));
+    
+      mesh->Splice(mesh->HEGetHE(he_prev), he);
+      mesh->Splice(mesh->HEGetHE(he), he_begin);
+
+      he_right = mesh->HEGetHE(he_prev);
     }
-
-    const FAIndex fa = mesh->FAAllocate();
-    mesh->FASetValence(fa, 3);
-    mesh->FASetHE(fa, he);
-    mesh->HESetFA(he, fa);
-
-    // Create the second edge.
-    HEIndex he_begin = he;
-    HEIndex he_prev = he;
-    he = mesh->HEAllocate();
-    mesh->HESetFA(he, fa);
-    mesh->VXSetHE(mesh->HEGetVX(mesh->HEGetHE(he_prev)), he);
-    mesh->HESetVX(he, mesh->HEGetVX(mesh->HEGetHE(he_prev)));
-
-    mesh->HESetVX(mesh->HEGetHE(he), vxs[2]);
-    
-    mesh->Splice(mesh->HEGetHE(he_prev), he);
-
-    he_prev = he;
-
-    // Create the third edge.
-    he = mesh->HEAllocate();
-    mesh->HESetFA(he, fa);
-    mesh->VXSetHE(mesh->HEGetVX(mesh->HEGetHE(he_prev)), he);
-    mesh->HESetVX(he, mesh->HEGetVX(mesh->HEGetHE(he_prev)));
-
-    mesh->HESetVX(mesh->HEGetHE(he), mesh->HEGetVX(he_begin));
-    
-    mesh->Splice(mesh->HEGetHE(he_prev), he);
-    mesh->Splice(mesh->HEGetHE(he), he_begin);
-
-    HEIndex he_right = mesh->HEGetHE(he_prev);
+    CHECK_NE(he_right, kHEInvalid);
 
     // Insert the rest of the points.
     for (++index; index < size; ++index) {
-      const int point_index = sorted_point_indices[index];
       // Find the top silhouette vertex.
       HEIndex he_top = mesh->HEGetFAPrev(he_right);
       ScalarT ccw_top(0);
-      for (; he_top != he_right; he_top = mesh->HEGetFAPrev(he_top)) {
-        ccw_top = this->preds_->CCWInscribedCircle_VVV(
-            mesh->VXGetPoint(mesh->HEGetVX(he_top)),
-            mesh->VXGetPoint(mesh->HEGetVX(mesh->HEGetHE(he_top))),
-            points[point_index]);
-        if (ccw_top <= kZero) {
-          // Found the silhouette vertex.
+      int point_index = -1;
+      if (keep_collinear_points) {
+        // Skip duplicate vertices.
+        for (; index < size; ++index) {
+          if (point_comparator(mesh->VXGetPoint(mesh->HEGetVX(he_right)),
+                               points[sorted_point_indices[index]])) {
+            // A non-coincident point is found.
+            break;
+          }
+          // Skip the coincident point.
+        }
+        if (size <= index) {
           break;
         }
+        point_index = sorted_point_indices[index];
+        for (; he_top != he_right; he_top = mesh->HEGetFAPrev(he_top)) {
+          ccw_top = this->preds_->CCWInscribedCircle_VVV(
+              mesh->VXGetPoint(mesh->HEGetVX(he_top)),
+              mesh->VXGetPoint(mesh->HEGetVX(mesh->HEGetHE(he_top))),
+              points[point_index]);
+          if (ccw_top <= kZero) {
+            // Found the silhouette vertex.
+            break;
+          }
+        }
+        if (fa == kFAInvalid) {
+          if (ccw_top == kZero) {
+            // Extend the collinear polyline.
+            const VXIndex vx = mesh->VXAllocate();
+            mesh->VXSetValence(vx, 1);
+            mesh->VXMutablePoint(vx) = points[point_index];
+            if (index_for_vx != nullptr) {
+              (*index_for_vx)[vx] = point_index;
+            }
+            HEIndex he_prev = he_top;
+            he = mesh->HEAllocate();
+            mesh->VXSetValence(mesh->HEGetVX(mesh->HEGetHE(he_prev)), 2);
+            mesh->VXSetHE(mesh->HEGetVX(mesh->HEGetHE(he_prev)), he);
+            mesh->HESetVX(he, mesh->HEGetVX(mesh->HEGetHE(he_prev)));
+
+            mesh->VXSetHE(vx, mesh->HEGetHE(he));
+            mesh->HESetVX(mesh->HEGetHE(he), vx);
+    
+            mesh->Splice(mesh->HEGetHE(he_prev), he);
+
+            he_right = mesh->HEGetHE(he);
+          } else {
+            // A non-collinear point is found, so allocate a facet.
+            fa = mesh->FAAllocate();
+            mesh->FASetHE(fa, mesh->HEGetHE(he_top));
+            HEIndex he_begin = kHEInvalid;
+            HEIndex he = he_top;
+            int valence = 0;
+            do {
+              ++valence;
+              mesh->HESetFA(mesh->HEGetHE(he), fa);
+              if (he != mesh->HEGetFAPrev(he)) {
+                he_begin = he;
+              }
+
+              he = mesh->HEGetFAPrev(he);
+            } while (he != he_top);
+            CHECK_NE(he_begin, kHEInvalid);
+
+            valence += 2;
+            mesh->FASetValence(fa, valence);
+
+            // Add the new vertex and two new edges.
+            const VXIndex vx = mesh->VXAllocate();
+            mesh->VXSetValence(vx, 2);
+            mesh->VXMutablePoint(vx) = points[point_index];
+            if (index_for_vx != nullptr) {
+              (*index_for_vx)[vx] = point_index;
+            }
+            HEIndex he_prev = mesh->HEGetHE(he_begin);
+            he = mesh->HEAllocate();
+            mesh->HESetFA(he, fa);
+            mesh->VXSetValence(mesh->HEGetVX(mesh->HEGetHE(he_prev)), 2);
+            mesh->VXSetHE(mesh->HEGetVX(mesh->HEGetHE(he_prev)), he);
+            mesh->HESetVX(he, mesh->HEGetVX(mesh->HEGetHE(he_prev)));
+
+            mesh->HESetVX(mesh->HEGetHE(he), vx);
+    
+            mesh->Splice(mesh->HEGetHE(he_prev), he);
+
+            he_prev = he;
+
+            he = mesh->HEAllocate();
+            mesh->HESetFA(he, fa);
+            mesh->VXSetValence(mesh->HEGetVX(mesh->HEGetHE(he_top)), 2);
+            mesh->VXSetHE(mesh->HEGetVX(mesh->HEGetHE(he_prev)), he);
+            mesh->HESetVX(he, mesh->HEGetVX(mesh->HEGetHE(he_prev)));
+
+            mesh->VXSetHE(mesh->HEGetVX(mesh->HEGetHE(he_top)), mesh->HEGetHE(he_top));
+            mesh->HESetVX(mesh->HEGetHE(he), mesh->HEGetVX(mesh->HEGetHE(he_top)));
+    
+            mesh->Splice(mesh->HEGetHE(he_prev), he);
+            mesh->Splice(mesh->HEGetHE(he_top), mesh->HEGetHE(he));
+
+            if (point_comparator(mesh->VXGetPoint(mesh->HEGetVX(he_begin)),
+                                 mesh->VXGetPoint(mesh->HEGetVX(mesh->HEGetHE(he_top))))) {
+              he_right = mesh->HEGetHE(he);
+            } else {
+              he_right = mesh->HEGetFANext(mesh->HEGetVXPrev(he));
+            }
+          }
+          // The convex hull has been updated, and he_right has been moved.
+          continue;
+        }
+      } else {
+        // Remove collinear points.
+        point_index = sorted_point_indices[index];
+        for (; he_top != he_right; he_top = mesh->HEGetFAPrev(he_top)) {
+          ccw_top = this->preds_->CCWInscribedCircle_VVV(
+              mesh->VXGetPoint(mesh->HEGetVX(he_top)),
+              mesh->VXGetPoint(mesh->HEGetVX(mesh->HEGetHE(he_top))),
+              points[point_index]);
+          if (ccw_top <= kZero) {
+            // Found the silhouette vertex.
+            break;
+          }
+        }
       }
+      CHECK_NE(fa, kFAInvalid);
       CHECK_NE(he_top, he_right);
-      
+      CHECK_LE(0, point_index);
+
       // Find the bottom silhouette vertex.
       HEIndex he_bottom = he_right;
       ScalarT ccw_bottom(1);
@@ -257,17 +428,19 @@ class ConvexHull2DImpl : public ConvexHull2D<ScalarT> {
       CHECK_LE(ccw_bottom, kZero);
 
       // Attach the new vertex.
-      if (ccw_top == kZero && ccw_bottom == kZero) {
-        // The point is coincident to an existing vertex, so skip it.
-        CHECK_EQ(he_bottom, he_right);
-        CHECK_EQ(mesh->HEGetFANext(he_top), he_bottom);
-        continue;
+      if (!keep_collinear_points) {
+        if (ccw_top == kZero && ccw_bottom == kZero) {
+          // The point is coincident to an existing vertex, so skip it.
+          CHECK_EQ(he_bottom, he_right);
+          CHECK_EQ(mesh->HEGetFANext(he_top), he_bottom);
+          continue;
+        }
       }
 
       CHECK_NE(mesh->HEGetFANext(he_top), he_bottom);
 
       HEIndex he_begin = he_right;
-      if (ccw_top == kZero) {
+      if (!keep_collinear_points && ccw_top == kZero) {
         // Replace the top collinear vertex.
         const VXIndex vx = mesh->HEGetVX(mesh->HEGetHE(he_top));
         mesh->VXMutablePoint(vx) = points[point_index];
@@ -284,7 +457,7 @@ class ConvexHull2DImpl : public ConvexHull2D<ScalarT> {
           continue;
         }
         this->RemoveHiddenVerticesAndEdges(fa, he, he_bottom, mesh.get(), index_for_vx);
-      } else if (ccw_bottom == kZero) {
+      } else if (!keep_collinear_points && ccw_bottom == kZero) {
         // Replace the bottom collinear vertex.
         const VXIndex vx = mesh->HEGetVX(he_bottom);
         mesh->VXMutablePoint(vx) = points[point_index];
@@ -293,7 +466,7 @@ class ConvexHull2DImpl : public ConvexHull2D<ScalarT> {
         }
 
         he_right = he_bottom;
-        
+      
         he_begin = mesh->HEGetFANext(he_top);
         HEIndex he = mesh->HEGetFANext(he_begin);
         if (he == he_bottom) {
@@ -302,7 +475,7 @@ class ConvexHull2DImpl : public ConvexHull2D<ScalarT> {
         }
         this->RemoveHiddenVerticesAndEdges(fa, he, he_bottom, mesh.get(), index_for_vx);
       } else {
-        // Neither top nor bottom is collinear.
+        // Neither top nor bottom is collinear (or keep collinear points).
         HEIndex he = mesh->HEGetFANext(he_top);
         if (mesh->HEGetFANext(he) == he_bottom) {
           // Add a new vertex and edge.
@@ -358,8 +531,9 @@ class ConvexHull2DImpl : public ConvexHull2D<ScalarT> {
 
       he = mesh->HEGetFANext(he);
     } while (he != he_right);
-    mesh->FASetValence(fa, valence);
-    
+    if (fa != kFAInvalid) {
+      mesh->FASetValence(fa, valence);
+    }
     return mesh;
   }
 
