@@ -3,10 +3,13 @@
 // Half edge mesh to represent 2-manifolds with positional geometry.
 
 #include <string>
+#include <unordered_map>
 
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "cc/hemesh/hemesh.h"
 #include "cc/math/vector.h"
+#include "cc/status/status_macros.h"
 
 namespace hemesh {
 
@@ -19,6 +22,50 @@ class MeshGeometry : public MeshConnectivity {
 
   virtual ~MeshGeometry() = default;
   
+  // Copy the source geometry mesh into the current destination mesh.
+  // Parameters:
+  //   mesh_src - Source geometry mesh that is copied.
+  //   opt_vx_src_for_dst - If not nullptr, receives a map of {vx_src, vx_dst} pairs.
+  //   opt_fa_src_for_dst - If not nullptr, receives a map of {fa_src, fa_dst} pairs.
+  //   opt_he_src_for_dst - If not nullptr, receives a map of {he_src, he_dst} pairs.
+  absl::Status CopyGeometry(
+      const MeshGeometry<ScalarT, dim>& mesh_src,
+      std::unordered_map<VXIndex, VXIndex>* opt_vx_src_for_dst,
+      std::unordered_map<FAIndex, FAIndex>* opt_fa_src_for_dst,
+      std::unordered_map<HEIndex, HEIndex>* opt_he_src_for_dst) const {
+    std::unordered_map<VXIndex, VXIndex>* vx_src_for_dst = opt_vx_src_for_dst;
+    std::unordered_map<VXIndex, VXIndex> local_vx_src_for_dst;
+    if (vx_src_for_dst == nullptr) {
+      vx_src_for_dst = &local_vx_src_for_dst;
+    }
+
+    std::unordered_map<FAIndex, FAIndex>* fa_src_for_dst = opt_fa_src_for_dst;
+    std::unordered_map<FAIndex, FAIndex> local_fa_src_for_dst;
+    if (fa_src_for_dst == nullptr) {
+      fa_src_for_dst = &local_fa_src_for_dst;
+    }
+
+    std::unordered_map<HEIndex, HEIndex>* he_src_for_dst = opt_he_src_for_dst;
+    std::unordered_map<HEIndex, HEIndex> local_he_src_for_dst;
+    if (he_src_for_dst == nullptr) {
+      he_src_for_dst = &local_he_src_for_dst;
+    }
+
+    RETURN_IF_ERROR(
+        this->CopyConnectivity(mesh_src, vx_src_for_dst, fa_src_for_dst, he_src_for_dst));
+
+    // Copy vertex fields.
+    for (const auto& [vx_dst, vx_src] : *vx_src_for_dst) {
+      this->VXMutablePoint(vx_dst) = mesh_src.VXGetPoint(vx_src);
+    }
+
+    // Copy facet fields.
+
+    // Copy half edge fields.
+
+    return absl::OkStatus();
+  }
+
   // Vertex methods.
   
   const math::ConstVector<ScalarT, dim>& VXGetPoint(VXIndex vx) const {
