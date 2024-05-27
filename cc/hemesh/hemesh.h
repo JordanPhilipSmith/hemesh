@@ -482,8 +482,8 @@ class MeshConnectivity {
       }
 
       {
-        CHECK_NE(he_fa_next_src, kHEInvalid);
         const HEIndex he_fa_next_src = mesh_src.HEGetFANext(he_src);
+        CHECK_NE(he_fa_next_src, kHEInvalid);
         auto iter = he_src_for_dst->find(he_fa_next_src);
         CHECK(iter != he_src_for_dst->cend());
         const HEIndex he_fa_next_dst = iter->second;
@@ -491,7 +491,7 @@ class MeshConnectivity {
       }
       
       if (mesh_src.HEGetIsBoundary(he_src)) {
-        this->HESetIsBoundary(he_dst);
+        this->HESetIsBoundary(he_dst, true);
       }
     }
 
