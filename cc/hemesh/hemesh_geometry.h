@@ -25,37 +25,37 @@ class MeshGeometry : public MeshConnectivity {
   // Copy the source geometry mesh into the current destination mesh.
   // Parameters:
   //   mesh_src - Source geometry mesh that is copied.
-  //   opt_vx_src_for_dst - If not nullptr, receives a map of {vx_src, vx_dst} pairs.
-  //   opt_fa_src_for_dst - If not nullptr, receives a map of {fa_src, fa_dst} pairs.
-  //   opt_he_src_for_dst - If not nullptr, receives a map of {he_src, he_dst} pairs.
+  //   opt_vx_dst_for_src - If not nullptr, receives a map of {vx_src, vx_dst} pairs.
+  //   opt_fa_dst_for_src - If not nullptr, receives a map of {fa_src, fa_dst} pairs.
+  //   opt_he_dst_for_src - If not nullptr, receives a map of {he_src, he_dst} pairs.
   absl::Status CopyGeometry(
       const MeshGeometry<ScalarT, dim>& mesh_src,
-      std::unordered_map<VXIndex, VXIndex>* opt_vx_src_for_dst,
-      std::unordered_map<FAIndex, FAIndex>* opt_fa_src_for_dst,
-      std::unordered_map<HEIndex, HEIndex>* opt_he_src_for_dst) {
-    std::unordered_map<VXIndex, VXIndex>* vx_src_for_dst = opt_vx_src_for_dst;
-    std::unordered_map<VXIndex, VXIndex> local_vx_src_for_dst;
-    if (vx_src_for_dst == nullptr) {
-      vx_src_for_dst = &local_vx_src_for_dst;
+      std::unordered_map<VXIndex, VXIndex>* opt_vx_dst_for_src,
+      std::unordered_map<FAIndex, FAIndex>* opt_fa_dst_for_src,
+      std::unordered_map<HEIndex, HEIndex>* opt_he_dst_for_src) {
+    std::unordered_map<VXIndex, VXIndex>* vx_dst_for_src = opt_vx_dst_for_src;
+    std::unordered_map<VXIndex, VXIndex> local_vx_dst_for_src;
+    if (vx_dst_for_src == nullptr) {
+      vx_dst_for_src = &local_vx_dst_for_src;
     }
 
-    std::unordered_map<FAIndex, FAIndex>* fa_src_for_dst = opt_fa_src_for_dst;
-    std::unordered_map<FAIndex, FAIndex> local_fa_src_for_dst;
-    if (fa_src_for_dst == nullptr) {
-      fa_src_for_dst = &local_fa_src_for_dst;
+    std::unordered_map<FAIndex, FAIndex>* fa_dst_for_src = opt_fa_dst_for_src;
+    std::unordered_map<FAIndex, FAIndex> local_fa_dst_for_src;
+    if (fa_dst_for_src == nullptr) {
+      fa_dst_for_src = &local_fa_dst_for_src;
     }
 
-    std::unordered_map<HEIndex, HEIndex>* he_src_for_dst = opt_he_src_for_dst;
-    std::unordered_map<HEIndex, HEIndex> local_he_src_for_dst;
-    if (he_src_for_dst == nullptr) {
-      he_src_for_dst = &local_he_src_for_dst;
+    std::unordered_map<HEIndex, HEIndex>* he_dst_for_src = opt_he_dst_for_src;
+    std::unordered_map<HEIndex, HEIndex> local_he_dst_for_src;
+    if (he_dst_for_src == nullptr) {
+      he_dst_for_src = &local_he_dst_for_src;
     }
 
     RETURN_IF_ERROR(
-        this->CopyConnectivity(mesh_src, vx_src_for_dst, fa_src_for_dst, he_src_for_dst));
+        this->CopyConnectivity(mesh_src, vx_dst_for_src, fa_dst_for_src, he_dst_for_src));
 
     // Copy vertex fields.
-    for (const auto& [vx_dst, vx_src] : *vx_src_for_dst) {
+    for (const auto& [vx_src, vx_dst] : *vx_dst_for_src) {
       this->VXMutablePoint(vx_dst) = mesh_src.VXGetPoint(vx_src);
     }
 
