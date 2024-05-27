@@ -379,7 +379,7 @@ class MeshConnectivity {
       const MeshConnectivity& mesh_src,
       std::unordered_map<VXIndex, VXIndex>* opt_vx_src_for_dst,
       std::unordered_map<FAIndex, FAIndex>* opt_fa_src_for_dst,
-      std::unordered_map<HEIndex, HEIndex>* opt_he_src_for_dst) const {
+      std::unordered_map<HEIndex, HEIndex>* opt_he_src_for_dst) {
     std::unordered_map<VXIndex, VXIndex>* vx_src_for_dst = opt_vx_src_for_dst;
     std::unordered_map<VXIndex, VXIndex> local_vx_src_for_dst;
     if (vx_src_for_dst == nullptr) {
