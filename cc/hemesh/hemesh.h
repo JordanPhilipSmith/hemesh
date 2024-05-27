@@ -52,11 +52,13 @@
 #include <algorithm>
 #include <iostream>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include "absl/log/check.h"
 #include "absl/log/log.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 
 namespace hemesh {
@@ -367,6 +369,135 @@ class MeshConnectivity {
 
   virtual ~MeshConnectivity() = default;
   
+  // Copy the source connectivity mesh into the current destination mesh.
+  // Parameters:
+  //   mesh_src - Source connectivity mesh that is copied.
+  //   opt_vx_src_for_dst - If not nullptr, receives a map of {vx_src, vx_dst} pairs.
+  //   opt_fa_src_for_dst - If not nullptr, receives a map of {fa_src, fa_dst} pairs.
+  //   opt_he_src_for_dst - If not nullptr, receives a map of {he_src, he_dst} pairs.
+  absl::Status CopyConnectivity(
+      const MeshConnectivity& mesh_src,
+      std::unordered_map<VXIndex, VXIndex>* opt_vx_src_for_dst,
+      std::unordered_map<FAIndex, FAIndex>* opt_fa_src_for_dst,
+      std::unordered_map<HEIndex, HEIndex>* opt_he_src_for_dst) const {
+    std::unordered_map<VXIndex, VXIndex>* vx_src_for_dst = opt_vx_src_for_dst;
+    std::unordered_map<VXIndex, VXIndex> local_vx_src_for_dst;
+    if (vx_src_for_dst == nullptr) {
+      vx_src_for_dst = &local_vx_src_for_dst;
+    }
+
+    std::unordered_map<FAIndex, FAIndex>* fa_src_for_dst = opt_fa_src_for_dst;
+    std::unordered_map<FAIndex, FAIndex> local_fa_src_for_dst;
+    if (fa_src_for_dst == nullptr) {
+      fa_src_for_dst = &local_fa_src_for_dst;
+    }
+
+    std::unordered_map<HEIndex, HEIndex>* he_src_for_dst = opt_he_src_for_dst;
+    std::unordered_map<HEIndex, HEIndex> local_he_src_for_dst;
+    if (he_src_for_dst == nullptr) {
+      he_src_for_dst = &local_he_src_for_dst;
+    }
+
+    // Allocate the vertices.
+    for (VXIndex vx_src : mesh_src.GetSortedVXIndices()) {
+      VXIndex vx_dst = this->VXAllocate();
+      (*vx_src_for_dst)[vx_dst] = vx_src;
+    }
+    
+    // Allocate the facets.
+    for (FAIndex fa_src : mesh_src.GetSortedFAIndices()) {
+      FAIndex fa_dst = this->FAAllocate();
+      (*fa_src_for_dst)[fa_dst] = fa_src;
+    }
+    
+    // Allocate the half edges.
+    for (HEIndex he_src : mesh_src.GetSortedHEIndices()) {
+      HEIndex he_dst = this->HEAllocate();
+      (*he_src_for_dst)[he_dst] = he_src;
+      (*he_src_for_dst)[this->HEGetHE(he_dst)] = mesh_src.HEGetHE(he_src);
+    }
+    
+    // Copy vertex fields.
+    for (const auto& [vx_dst, vx_src] : *vx_src_for_dst) {
+      this->VXSetValence(vx_dst, mesh_src.VXGetValence(vx_src));
+
+      HEIndex he_src = mesh_src.VXGetHE(vx_src);
+      HEIndex he_dst = kHEInvalid;
+      if (he_src != kHEInvalid) {
+        auto iter = he_src_for_dst->find(he_src);
+        CHECK(iter != he_src_for_dst->cend());
+        he_dst = iter->second;
+      }
+      this->VXSetHE(vx_dst, he_dst);
+    }
+
+    // Copy facet fields.
+    for (const auto& [fa_dst, fa_src] : *fa_src_for_dst) {
+      this->FASetValence(fa_dst, mesh_src.FAGetValence(fa_src));
+
+      HEIndex he_src = mesh_src.FAGetHE(fa_src);
+      HEIndex he_dst = kHEInvalid;
+      if (he_src != kHEInvalid) {
+        auto iter = he_src_for_dst->find(he_src);
+        CHECK(iter != he_src_for_dst->cend());
+        he_dst = iter->second;
+      }
+      this->FASetHE(fa_dst, he_dst);
+    }
+
+    // Copy half edge fields.
+    for (const auto& [he_dst, he_src] : *he_src_for_dst) {
+      HalfEdgeConnectivity* connectivity_dst = this->HEMutableConnectivity(he_dst);
+      CHECK_NE(connectivity_dst, nullptr);
+
+      {
+        const VXIndex vx_src = mesh_src.HEGetVX(he_src);
+        VXIndex vx_dst = kVXInvalid;
+        if (vx_src != kVXInvalid) {
+          auto iter = vx_src_for_dst->find(vx_src);
+          CHECK(iter != vx_src_for_dst->cend());
+          vx_dst = iter->second;
+        }
+        connectivity_dst->vx = vx_dst;
+      }
+
+      {
+        const FAIndex fa_src = mesh_src.HEGetFA(he_src);
+        FAIndex fa_dst = kFAInvalid;
+        if (fa_src != kFAInvalid) {
+          auto iter = fa_src_for_dst->find(fa_src);
+          CHECK(iter != fa_src_for_dst->cend());
+          fa_dst = iter->second;
+        }
+        connectivity_dst->fa = fa_dst;
+      }
+
+      {
+        const HEIndex he_vx_next_src = mesh_src.HEGetVXNext(he_src);
+        CHECK_NE(he_vx_next_src, kHEInvalid);
+        auto iter = he_src_for_dst->find(he_vx_next_src);
+        CHECK(iter != he_src_for_dst->cend());
+        const HEIndex he_vx_next_dst = iter->second;
+        connectivity_dst->he_vx_next = he_vx_next_dst;
+      }
+
+      {
+        CHECK_NE(he_fa_next_src, kHEInvalid);
+        const HEIndex he_fa_next_src = mesh_src.HEGetFANext(he_src);
+        auto iter = he_src_for_dst->find(he_fa_next_src);
+        CHECK(iter != he_src_for_dst->cend());
+        const HEIndex he_fa_next_dst = iter->second;
+        connectivity_dst->he_fa_next = he_fa_next_dst;
+      }
+      
+      if (mesh_src.HEGetIsBoundary(he_src)) {
+        this->HESetIsBoundary(he_dst);
+      }
+    }
+
+    return absl::OkStatus();
+  }
+
   // Vertex methods.
   
   int GetVerticesSize() const {

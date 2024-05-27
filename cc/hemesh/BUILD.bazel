@@ -12,7 +12,9 @@ cc_library(
     "//cc/math:vector",
     "@abseil-cpp//absl/log",
     "@abseil-cpp//absl/log:check",
+    "@abseil-cpp//absl/status",
     "@abseil-cpp//absl/strings",
+    "@absl_util//cc/status:status_macros",
   ],
 )
 
